@@ -1,0 +1,5 @@
+:root { color-scheme: dark; --color-background: #111318; --color-surface: #1a1e26; --color-text: #f4f5f7; --color-muted: #a7adba; --color-accent: #7c8cff; --color-border: #303744; font-family: Inter, system-ui, sans-serif; background: var(--color-background); color: var(--color-text); }
+* { box-sizing: border-box; }
+body { min-width: 320px; min-height: 100vh; margin: 0; background: linear-gradient(135deg, var(--color-background), var(--color-surface)); }
+.connection-check { padding: 1rem; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: 0.01ms !important; } }
