@@ -1,5 +1,8 @@
 from django.db import IntegrityError
 from django.test import TestCase
+from rest_framework import status
+from rest_framework.test import APITestCase
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.users.models import User, UserProfile
 
@@ -41,3 +44,127 @@ class UserModelTests(TestCase):
         self.assertIsNone(profile.language)
         self.assertIsNone(profile.budget_preferences)
         self.assertIsNone(profile.location_preferences)
+
+
+class AuthAPITests(APITestCase):
+    def setUp(self):
+        self.user_email = "authuser@example.com"
+        self.user_password = "Password123!"
+        self.user_name = "Auth User"
+        self.user = User.objects.create_user(
+            email=self.user_email,
+            name=self.user_name,
+            password=self.user_password,
+        )
+        UserProfile.objects.create(user=self.user, preferred_city="Kanpur", language="hi")
+
+    def test_register_success(self):
+        payload = {
+            "name": "New User",
+            "email": "newuser@example.com",
+            "password": "SecurePassword123",
+        }
+        response = self.client.post("/api/auth/register/", payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(response.data["success"])
+        self.assertIsNone(response.data["error"])
+        self.assertEqual(response.data["data"]["user"]["name"], "New User")
+        self.assertEqual(response.data["data"]["user"]["email"], "newuser@example.com")
+        self.assertIn("access_token", response.data["data"])
+        self.assertIn("refresh_token", response.data["data"])
+
+        # Confirm password is not returned in body and is properly hashed in DB
+        created_user = User.objects.get(email="newuser@example.com")
+        self.assertNotIn("password", response.data["data"]["user"])
+        self.assertTrue(created_user.check_password("SecurePassword123"))
+
+    def test_register_duplicate_email(self):
+        payload = {
+            "name": "Duplicate User",
+            "email": self.user_email,
+            "password": "SecurePassword123",
+        }
+        response = self.client.post("/api/auth/register/", payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(response.data["success"])
+        self.assertIsNone(response.data["data"])
+        self.assertEqual(response.data["error"]["code"], "VALIDATION_ERROR")
+
+    def test_register_short_password(self):
+        payload = {
+            "name": "Short Password",
+            "email": "shortpass@example.com",
+            "password": "short",
+        }
+        response = self.client.post("/api/auth/register/", payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(response.data["success"])
+        self.assertEqual(response.data["error"]["code"], "VALIDATION_ERROR")
+
+    def test_login_success(self):
+        payload = {"email": self.user_email, "password": self.user_password}
+        response = self.client.post("/api/auth/login/", payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["success"])
+        self.assertEqual(response.data["data"]["user"]["email"], self.user_email)
+        self.assertIn("access_token", response.data["data"])
+        self.assertIn("refresh_token", response.data["data"])
+        self.assertNotIn("password", response.data["data"]["user"])
+
+    def test_login_invalid_password(self):
+        payload = {"email": self.user_email, "password": "WrongPassword!"}
+        response = self.client.post("/api/auth/login/", payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertFalse(response.data["success"])
+        self.assertEqual(response.data["error"]["code"], "UNAUTHORIZED")
+        self.assertEqual(response.data["error"]["message"], "Incorrect email or password")
+
+    def test_login_nonexistent_email(self):
+        payload = {"email": "nobody@example.com", "password": "Password123!"}
+        response = self.client.post("/api/auth/login/", payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertFalse(response.data["success"])
+        self.assertEqual(response.data["error"]["code"], "UNAUTHORIZED")
+        self.assertEqual(response.data["error"]["message"], "Incorrect email or password")
+
+    def test_refresh_token_success(self):
+        refresh = RefreshToken.for_user(self.user)
+        payload = {"refresh_token": str(refresh)}
+        response = self.client.post("/api/auth/refresh/", payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["success"])
+        self.assertIn("access_token", response.data["data"])
+
+    def test_refresh_token_invalid(self):
+        payload = {"refresh_token": "invalid_refresh_token"}
+        response = self.client.post("/api/auth/refresh/", payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertFalse(response.data["success"])
+        self.assertEqual(response.data["error"]["code"], "UNAUTHORIZED")
+
+    def test_logout_success(self):
+        refresh = RefreshToken.for_user(self.user)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {refresh.access_token}")
+        response = self.client.post("/api/auth/logout/", {}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["success"])
+        self.assertIsNone(response.data["data"])
+
+    def test_me_authenticated(self):
+        refresh = RefreshToken.for_user(self.user)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {refresh.access_token}")
+        response = self.client.get("/api/auth/me/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["success"])
+        self.assertEqual(response.data["data"]["id"], str(self.user.id))
+        self.assertEqual(response.data["data"]["name"], self.user_name)
+        self.assertEqual(response.data["data"]["email"], self.user_email)
+        self.assertEqual(response.data["data"]["profile"]["preferred_city"], "Kanpur")
+        self.assertEqual(response.data["data"]["profile"]["language"], "hi")
+
+    def test_me_unauthenticated(self):
+        response = self.client.get("/api/auth/me/")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertFalse(response.data["success"])
+        self.assertEqual(response.data["error"]["code"], "UNAUTHORIZED")
+
