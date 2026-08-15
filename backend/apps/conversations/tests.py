@@ -1,5 +1,9 @@
+import uuid
 from django.core.exceptions import ValidationError
 from django.test import TestCase
+from rest_framework import status
+from rest_framework.test import APITestCase
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.conversations.models import Conversation, Message
 from apps.users.models import User
@@ -110,3 +114,127 @@ class ConversationAndMessageModelTests(TestCase):
 
         conversation.delete()
         self.assertEqual(Message.objects.count(), 0)
+
+
+class ConversationAPITests(APITestCase):
+    def setUp(self):
+        self.user_a = User.objects.create_user(
+            email="usera@example.com", name="User A", password="Password123!"
+        )
+        self.user_b = User.objects.create_user(
+            email="userb@example.com", name="User B", password="Password123!"
+        )
+
+        self.conv_a = Conversation.objects.create(
+            user=self.user_a, title="User A Chat", city="Kanpur"
+        )
+        self.conv_b = Conversation.objects.create(
+            user=self.user_b, title="User B Chat", city="Lucknow"
+        )
+
+        self.msg_a1 = Message.objects.create(
+            conversation=self.conv_a, role="user", content="First user message"
+        )
+        self.msg_a2 = Message.objects.create(
+            conversation=self.conv_a,
+            role="assistant",
+            content="Assistant reply",
+            response_data={"type": "text", "content": "Assistant reply"},
+        )
+
+    def test_list_conversations_user_isolation(self):
+        token = RefreshToken.for_user(self.user_a).access_token
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+        response = self.client.get("/api/conversations/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["success"])
+        self.assertEqual(response.data["data"]["count"], 1)
+        self.assertEqual(response.data["data"]["results"][0]["id"], str(self.conv_a.id))
+        self.assertEqual(response.data["data"]["results"][0]["city"], "Kanpur")
+
+    def test_create_conversation_associates_authenticated_user(self):
+        token = RefreshToken.for_user(self.user_a).access_token
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+        payload = {"city": "Delhi"}
+        response = self.client.post("/api/conversations/", payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(response.data["success"])
+        self.assertEqual(response.data["data"]["city"], "Delhi")
+
+        created_conv = Conversation.objects.get(id=response.data["data"]["id"])
+        self.assertEqual(created_conv.user, self.user_a)
+
+    def test_get_conversation_detail_owner_success(self):
+        token = RefreshToken.for_user(self.user_a).access_token
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+        response = self.client.get(f"/api/conversations/{self.conv_a.id}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["success"])
+        self.assertEqual(response.data["data"]["id"], str(self.conv_a.id))
+
+    def test_get_conversation_detail_other_user_returns_404(self):
+        # User B trying to access User A's conversation MUST return 404 NOT_FOUND
+        token = RefreshToken.for_user(self.user_b).access_token
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+        response = self.client.get(f"/api/conversations/{self.conv_a.id}/")
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertFalse(response.data["success"])
+        self.assertEqual(response.data["error"]["code"], "NOT_FOUND")
+
+    def test_get_conversation_detail_nonexistent_returns_404(self):
+        token = RefreshToken.for_user(self.user_a).access_token
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+        fake_uuid = uuid.uuid4()
+        response = self.client.get(f"/api/conversations/{fake_uuid}/")
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertFalse(response.data["success"])
+        self.assertEqual(response.data["error"]["code"], "NOT_FOUND")
+
+    def test_get_conversation_messages_owner_success(self):
+        token = RefreshToken.for_user(self.user_a).access_token
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+        response = self.client.get(f"/api/conversations/{self.conv_a.id}/messages/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["success"])
+
+        results = response.data["data"]["results"]
+        self.assertEqual(len(results), 2)
+        self.assertEqual(results[0]["id"], str(self.msg_a1.id))
+        self.assertEqual(results[1]["id"], str(self.msg_a2.id))
+        self.assertEqual(results[1]["response_data"], {"type": "text", "content": "Assistant reply"})
+
+    def test_get_conversation_messages_other_user_returns_404(self):
+        token = RefreshToken.for_user(self.user_b).access_token
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+        response = self.client.get(f"/api/conversations/{self.conv_a.id}/messages/")
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertFalse(response.data["success"])
+        self.assertEqual(response.data["error"]["code"], "NOT_FOUND")
+
+    def test_unauthenticated_requests_rejected(self):
+        self.client.credentials()  # Remove authorization header
+
+        endpoints = [
+            ("GET", "/api/conversations/"),
+            ("POST", "/api/conversations/"),
+            ("GET", f"/api/conversations/{self.conv_a.id}/"),
+            ("GET", f"/api/conversations/{self.conv_a.id}/messages/"),
+        ]
+
+        for method, url in endpoints:
+            if method == "GET":
+                resp = self.client.get(url)
+            else:
+                resp = self.client.post(url, {}, format="json")
+
+            self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
+            self.assertFalse(resp.data["success"])
+            self.assertEqual(resp.data["error"]["code"], "UNAUTHORIZED")
+
