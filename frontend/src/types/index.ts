@@ -9,3 +9,31 @@ export interface PlaceResult { place_id: string; name: string; category: string;
 export interface ApiErrorData { code: string; message: string }
 export interface ApiEnvelope<T> { success: boolean; data: T | null; error: ApiErrorData | null }
 
+export interface UserProfile {
+  preferred_city: string | null
+  language: string | null
+}
+
+export interface User {
+  id: string
+  name: string
+  email: string
+  profile?: UserProfile | null
+}
+
+export interface AuthTokens {
+  access_token: string
+  refresh_token: string
+}
+
+export interface AuthData {
+  user: User
+  access_token: string
+  refresh_token: string
+}
+
+export interface RefreshTokenData {
+  access_token: string
+}
+
+
