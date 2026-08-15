@@ -168,3 +168,43 @@ class AuthAPITests(APITestCase):
         self.assertFalse(response.data["success"])
         self.assertEqual(response.data["error"]["code"], "UNAUTHORIZED")
 
+    def test_no_secret_or_password_hash_leakage(self):
+        """
+        Confirm no endpoint response body from any auth endpoint ever includes
+        a password hash, JWT signing secret, or raw password.
+        Ref: API_Specification.md §8 & Prompt 3B requirement
+        """
+        from django.conf import settings
+
+        raw_password = "SecretTestPassword123!"
+        reg_resp = self.client.post(
+            "/api/auth/register/",
+            {"name": "Secret Check", "email": "secret@example.com", "password": raw_password},
+            format="json",
+        )
+        user = User.objects.get(email="secret@example.com")
+
+        login_resp = self.client.post(
+            "/api/auth/login/",
+            {"email": "secret@example.com", "password": raw_password},
+            format="json",
+        )
+
+        refresh_token = login_resp.data["data"]["refresh_token"]
+        refresh_resp = self.client.post(
+            "/api/auth/refresh/",
+            {"refresh_token": refresh_token},
+            format="json",
+        )
+
+        access_token = login_resp.data["data"]["access_token"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {access_token}")
+        me_resp = self.client.get("/api/auth/me/")
+
+        for resp in [reg_resp, login_resp, refresh_resp, me_resp]:
+            content_str = resp.content.decode("utf-8")
+            self.assertNotIn(user.password, content_str)
+            self.assertNotIn(raw_password, content_str)
+            self.assertNotIn(settings.SECRET_KEY, content_str)
+
+
