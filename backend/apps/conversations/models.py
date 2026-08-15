@@ -5,6 +5,11 @@ from django.db import models
 
 
 class Conversation(models.Model):
+    """
+    Conversation session storage linked to User.
+    Ref: Backend_Schema.md §3.1
+    """
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -27,6 +32,12 @@ class Conversation(models.Model):
 
 
 class Message(models.Model):
+    """
+    Individual message turn within a conversation.
+    Stores structured AI response JSON in response_data for assistant turns.
+    Ref: Backend_Schema.md §3.2
+    """
+
     ROLE_CHOICES = (
         ("user", "User"),
         ("assistant", "Assistant"),

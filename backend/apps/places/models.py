@@ -4,6 +4,12 @@ from django.db import models
 
 
 class Place(models.Model):
+    """
+    Single generic model for all real-world places across categories.
+    Category-specific facts live in attributes JSONField (Option B decision).
+    Ref: Backend_Schema.md §5.1, §5.2
+    """
+
     CATEGORY_CHOICES = (
         ("hotel", "Hotel"),
         ("pg", "PG"),

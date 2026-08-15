@@ -1,9 +1,16 @@
 import uuid
-from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
+
+from django.contrib.auth.models import (
+    AbstractBaseUser,
+    BaseUserManager,
+    PermissionsMixin,
+)
 from django.db import models
 
 
 class UserManager(BaseUserManager):
+    """Custom user manager supporting email as unique identifier."""
+
     def create_user(self, email, password=None, name="", **extra_fields):
         if not email:
             raise ValueError("Users must have an email address")
@@ -27,6 +34,11 @@ class UserManager(BaseUserManager):
 
 
 class User(AbstractBaseUser, PermissionsMixin):
+    """
+    Custom user model for City Companion authentication.
+    Ref: Backend_Schema.md §2.1
+    """
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=150)
     email = models.EmailField(unique=True)
@@ -44,6 +56,11 @@ class User(AbstractBaseUser, PermissionsMixin):
 
 
 class UserProfile(models.Model):
+    """
+    Optional user preference profile linked 1:1 with User.
+    Ref: Backend_Schema.md §2.2
+    """
+
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")
     preferred_city = models.CharField(max_length=100, null=True, blank=True)
     language = models.CharField(max_length=20, null=True, blank=True)

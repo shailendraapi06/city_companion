@@ -3,6 +3,11 @@ from django.db import models
 
 
 class Feedback(models.Model):
+    """
+    User feedback (👍/👎 + reason) on an AI response message and optional place.
+    Ref: Backend_Schema.md §7.1
+    """
+
     TYPE_CHOICES = (
         ("up", "👍 Up"),
         ("down", "👎 Down"),

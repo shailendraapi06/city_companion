@@ -3,6 +3,11 @@ from django.db import models
 
 
 class SavedPlace(models.Model):
+    """
+    User's saved place bookmark with unique constraint on (user, place).
+    Ref: Backend_Schema.md §6.1
+    """
+
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
