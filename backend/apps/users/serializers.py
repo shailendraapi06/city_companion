@@ -75,3 +75,19 @@ class RefreshTokenSerializer(serializers.Serializer):
     """
 
     refresh_token = serializers.CharField(required=True)
+
+
+class UserProfileUpdateSerializer(serializers.Serializer):
+    """
+    Serializer for PATCH /api/auth/me/
+    Ref: Documented extension for profile update.
+    """
+
+    name = serializers.CharField(max_length=150, required=False)
+    preferred_city = serializers.CharField(
+        max_length=100, required=False, allow_null=True, allow_blank=True
+    )
+    language = serializers.CharField(
+        max_length=10, required=False, allow_null=True, allow_blank=True
+    )
+

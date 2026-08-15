@@ -218,6 +218,25 @@ class ConversationAPITests(APITestCase):
         self.assertFalse(response.data["success"])
         self.assertEqual(response.data["error"]["code"], "NOT_FOUND")
 
+    def test_delete_conversation_owner_success(self):
+        token = RefreshToken.for_user(self.user_a).access_token
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+        response = self.client.delete(f"/api/conversations/{self.conv_a.id}/")
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+
+        # Confirm conversation and messages are deleted from DB
+        self.assertFalse(Conversation.objects.filter(id=self.conv_a.id).exists())
+        self.assertEqual(Message.objects.filter(conversation_id=self.conv_a.id).count(), 0)
+
+    def test_delete_conversation_other_user_returns_404(self):
+        token = RefreshToken.for_user(self.user_b).access_token
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+        response = self.client.delete(f"/api/conversations/{self.conv_a.id}/")
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertTrue(Conversation.objects.filter(id=self.conv_a.id).exists())
+
     def test_unauthenticated_requests_rejected(self):
         self.client.credentials()  # Remove authorization header
 
@@ -225,16 +244,20 @@ class ConversationAPITests(APITestCase):
             ("GET", "/api/conversations/"),
             ("POST", "/api/conversations/"),
             ("GET", f"/api/conversations/{self.conv_a.id}/"),
+            ("DELETE", f"/api/conversations/{self.conv_a.id}/"),
             ("GET", f"/api/conversations/{self.conv_a.id}/messages/"),
         ]
 
         for method, url in endpoints:
             if method == "GET":
                 resp = self.client.get(url)
-            else:
+            elif method == "POST":
                 resp = self.client.post(url, {}, format="json")
+            else:
+                resp = self.client.delete(url)
 
             self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
             self.assertFalse(resp.data["success"])
             self.assertEqual(resp.data["error"]["code"], "UNAUTHORIZED")
+
 

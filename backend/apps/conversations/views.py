@@ -1,7 +1,9 @@
 import math
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 from rest_framework.views import APIView
+
 
 from apps.conversations.models import Conversation, Message
 from apps.conversations.serializers import (
@@ -73,10 +75,12 @@ class ConversationListCreateView(APIView):
 
 
 class ConversationDetailView(APIView):
+
     """
     GET /api/conversations/{id}/ — Fetch metadata for a specific conversation.
+    DELETE /api/conversations/{id}/ — Delete a specific conversation (cascades to messages).
     Uses common/permissions.py get_owned_object_or_404 to enforce 404-not-403 isolation.
-    Ref: API_Specification.md §3.3
+    Ref: API_Specification.md §3.3 & Phase 4 Part C additions.
     """
 
     permission_classes = [IsAuthenticated]
@@ -85,6 +89,12 @@ class ConversationDetailView(APIView):
         conversation = get_owned_object_or_404(Conversation, request.user, id=pk)
         serializer = ConversationSerializer(conversation)
         return success_response(data=serializer.data, status_code=status.HTTP_200_OK)
+
+    def delete(self, request, pk):
+        conversation = get_owned_object_or_404(Conversation, request.user, id=pk)
+        conversation.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 
 
 class ConversationMessagesView(APIView):

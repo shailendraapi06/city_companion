@@ -80,3 +80,95 @@ class FeedbackModelTests(TestCase):
         fb.refresh_from_db()
         self.assertIsNone(fb.place)
         self.assertEqual(Feedback.objects.count(), 1)
+
+
+class FeedbackAPITests(TestCase):
+    def setUp(self):
+        from rest_framework.test import APIClient
+        from rest_framework_simplejwt.tokens import RefreshToken
+
+        self.client = APIClient()
+        self.user_a = User.objects.create_user(
+            email="usera@example.com", name="User A", password="Password123!"
+        )
+        self.user_b = User.objects.create_user(
+            email="userb@example.com", name="User B", password="Password123!"
+        )
+
+        self.conv_a = Conversation.objects.create(user=self.user_a)
+        self.msg_a = Message.objects.create(
+            conversation=self.conv_a, role="assistant", content="User A message response"
+        )
+
+        self.conv_b = Conversation.objects.create(user=self.user_b)
+        self.msg_b = Message.objects.create(
+            conversation=self.conv_b, role="assistant", content="User B message response"
+        )
+
+        self.place = Place.objects.create(
+            name="Apollo Hospital",
+            category="hospital",
+            latitude=Decimal("26.450000"),
+            longitude=Decimal("80.330000"),
+        )
+
+        self.token_a = str(RefreshToken.for_user(self.user_a).access_token)
+
+    def test_submit_valid_feedback_success(self):
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token_a}")
+
+        payload = {
+            "message_id": str(self.msg_a.id),
+            "place_id": str(self.place.id),
+            "type": "down",
+            "reason": "too_expensive",
+        }
+        response = self.client.post("/api/feedback/", payload, format="json")
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(response.data["success"])
+        self.assertEqual(response.data["data"]["type"], "down")
+        self.assertEqual(response.data["data"]["reason"], "too_expensive")
+
+    def test_feedback_on_another_user_message_returns_404(self):
+        # User A tries to give feedback on User B's message -> 404 NOT_FOUND
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token_a}")
+
+        payload = {
+            "message_id": str(self.msg_b.id),
+            "type": "up",
+        }
+        response = self.client.post("/api/feedback/", payload, format="json")
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(response.data["success"])
+        self.assertEqual(response.data["error"]["code"], "NOT_FOUND")
+
+    def test_invalid_type_or_reason_rejected(self):
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token_a}")
+
+        payload_bad_type = {
+            "message_id": str(self.msg_a.id),
+            "type": "invalid_type",
+        }
+        resp1 = self.client.post("/api/feedback/", payload_bad_type, format="json")
+        self.assertEqual(resp1.status_code, 400)
+        self.assertEqual(resp1.data["error"]["code"], "VALIDATION_ERROR")
+
+        payload_bad_reason = {
+            "message_id": str(self.msg_a.id),
+            "type": "down",
+            "reason": "invalid_reason_string",
+        }
+        resp2 = self.client.post("/api/feedback/", payload_bad_reason, format="json")
+        self.assertEqual(resp2.status_code, 400)
+        self.assertEqual(resp2.data["error"]["code"], "VALIDATION_ERROR")
+
+    def test_unauthenticated_feedback_rejected(self):
+        self.client.credentials()
+        payload = {
+            "message_id": str(self.msg_a.id),
+            "type": "up",
+        }
+        response = self.client.post("/api/feedback/", payload, format="json")
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.data["error"]["code"], "UNAUTHORIZED")
+

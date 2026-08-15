@@ -207,4 +207,51 @@ class AuthAPITests(APITestCase):
             self.assertNotIn(raw_password, content_str)
             self.assertNotIn(settings.SECRET_KEY, content_str)
 
+    def test_patch_profile_success(self):
+        refresh = RefreshToken.for_user(self.user)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {refresh.access_token}")
+
+        payload = {
+            "name": "Updated Name",
+            "preferred_city": "Lucknow",
+            "language": "en",
+        }
+        response = self.client.patch("/api/auth/me/", payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["success"])
+        self.assertEqual(response.data["data"]["name"], "Updated Name")
+        self.assertEqual(response.data["data"]["profile"]["preferred_city"], "Lucknow")
+        self.assertEqual(response.data["data"]["profile"]["language"], "en")
+
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.name, "Updated Name")
+        self.assertEqual(self.user.profile.preferred_city, "Lucknow")
+
+    def test_delete_account_cascades_user_resources(self):
+        from apps.conversations.models import Conversation, Message
+        from apps.feedback.models import Feedback
+        from apps.places.models import Place
+        from apps.saved_places.models import SavedPlace
+
+        # Create user resources
+        conv = Conversation.objects.create(user=self.user)
+        msg = Message.objects.create(conversation=conv, role="assistant", content="Response")
+        place = Place.objects.create(name="Test Mall", category="cafe", latitude=0, longitude=0)
+        SavedPlace.objects.create(user=self.user, place=place)
+        Feedback.objects.create(user=self.user, message=msg, type="up")
+
+        refresh = RefreshToken.for_user(self.user)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {refresh.access_token}")
+
+        response = self.client.delete("/api/auth/me/")
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+
+        # Confirm user and all user-owned resources are deleted via CASCADE
+        self.assertFalse(User.objects.filter(id=self.user.id).exists())
+        self.assertEqual(Conversation.objects.filter(user_id=self.user.id).count(), 0)
+        self.assertEqual(Message.objects.filter(conversation_id=conv.id).count(), 0)
+        self.assertEqual(SavedPlace.objects.filter(user_id=self.user.id).count(), 0)
+        self.assertEqual(Feedback.objects.filter(user_id=self.user.id).count(), 0)
+
+
 

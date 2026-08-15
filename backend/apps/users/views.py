@@ -1,6 +1,7 @@
 from django.contrib.auth import authenticate
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -11,9 +12,11 @@ from apps.users.serializers import (
     RefreshTokenSerializer,
     RegisterSerializer,
     UserBasicSerializer,
+    UserProfileUpdateSerializer,
     UserSerializer,
 )
 from common.responses import error_response, success_response
+
 
 
 class RegisterView(APIView):
@@ -132,10 +135,12 @@ class LogoutView(APIView):
 
 
 class MeView(APIView):
+
     """
-    GET /api/auth/me/
-    Return current authenticated user and profile.
-    Ref: API_Specification.md §2.5
+    GET /api/auth/me/ — Return current authenticated user and profile.
+    PATCH /api/auth/me/ — Update current authenticated user's name, preferred_city, or language.
+    DELETE /api/auth/me/ — Delete current authenticated user's account (cascades to all user resources).
+    Ref: API_Specification.md §2.5 & Phase 4 Part C additions.
     """
 
     permission_classes = [IsAuthenticated]
@@ -144,3 +149,34 @@ class MeView(APIView):
         UserProfile.objects.get_or_create(user=request.user)
         serializer = UserSerializer(request.user)
         return success_response(data=serializer.data, status_code=status.HTTP_200_OK)
+
+    def patch(self, request):
+        profile, _ = UserProfile.objects.get_or_create(user=request.user)
+        serializer = UserProfileUpdateSerializer(data=request.data)
+        if not serializer.is_valid():
+            messages = []
+            for field, errors in serializer.errors.items():
+                if isinstance(errors, list):
+                    messages.append(f"{field}: {' '.join(str(e) for e in errors)}")
+                else:
+                    messages.append(f"{field}: {errors}")
+            err_msg = "; ".join(messages) if messages else "Invalid profile parameters."
+            return error_response("VALIDATION_ERROR", err_msg, status.HTTP_400_BAD_REQUEST)
+
+        if "name" in serializer.validated_data:
+            request.user.name = serializer.validated_data["name"]
+            request.user.save()
+
+        if "preferred_city" in serializer.validated_data:
+            profile.preferred_city = serializer.validated_data["preferred_city"]
+        if "language" in serializer.validated_data:
+            profile.language = serializer.validated_data["language"]
+        profile.save()
+
+        user_serializer = UserSerializer(request.user)
+        return success_response(data=user_serializer.data, status_code=status.HTTP_200_OK)
+
+    def delete(self, request):
+        request.user.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
