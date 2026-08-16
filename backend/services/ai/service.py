@@ -61,10 +61,12 @@ class AIService:
         history: list[dict] | None = None,
         user_profile: dict | None = None,
         top_n: int = 5,
+        location: dict | None = None,
     ) -> dict:
         """
         Executes end-to-end pipeline:
-          1. Assemble conversation context.
+          1. Assemble conversation context (recent-history window + profile +
+             optional GPS location).
           2. Initial AI call with tools definitions.
           3. Process tool calls strictly via PlaceSearchService (5A) &
              RecommendationEngine (5B) — all four tools execute real functions.
@@ -72,9 +74,14 @@ class AIService:
           5. Schema-validate + mechanically verify (verifier.py) the AI's
              output, retrying once with specific feedback before falling back
              to a plain non-AI summary built from the real candidates.
+
+        `location` (optional {lat, lng}, from the browser-geolocation field in
+        the §5.1 request) is surfaced to the model so its search tool calls can
+        carry user_lat/user_lon; the deterministic forced-search path uses it
+        directly. Passing None (tests, offline) keeps prior behavior unchanged.
         """
         # 1. Assemble context
-        messages = self._assemble_context(user_message, history, user_profile)
+        messages = self._assemble_context(user_message, history, user_profile, location)
 
         # 2. Initial AI call
         ai_resp = self.client.create_chat_completion(
@@ -89,7 +96,7 @@ class AIService:
         # If the AI didn't request a tool call, attempt to detect a search
         # intent deterministically and force a search_places execution.
         if not tool_calls:
-            tool_calls = self._forced_tool_call_if_search_implied(user_message)
+            tool_calls = self._forced_tool_call_if_search_implied(user_message, location)
 
         if tool_calls:
             return self._handle_tool_calls_and_explain(
@@ -104,19 +111,23 @@ class AIService:
         }
         return validate_and_normalize_ai_response(fallback_payload)
 
-    def _forced_tool_call_if_search_implied(self, user_message: str) -> list[dict]:
+    def _forced_tool_call_if_search_implied(self, user_message: str, location: dict | None = None) -> list[dict]:
         search_query_implied = any(
             term in user_message.lower()
             for term in ["pg", "hostel", "hotel", "cafe", "restaurant", "hospital", "food", "budget", "near"]
         )
         if search_query_implied:
+            args = {"city": "Kanpur"}
+            if location and location.get("lat") is not None and location.get("lng") is not None:
+                args["user_lat"] = float(location["lat"])
+                args["user_lon"] = float(location["lng"])
             return [
                 {
                     "id": "forced_call_1",
                     "type": "function",
                     "function": {
                         "name": "search_places",
-                        "arguments": json.dumps({"city": "Kanpur"}),
+                        "arguments": json.dumps(args),
                     },
                 }
             ]
@@ -127,12 +138,25 @@ class AIService:
         user_message: str,
         history: list[dict] | None = None,
         user_profile: dict | None = None,
+        location: dict | None = None,
     ) -> list[dict]:
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
 
         if user_profile:
             profile_str = f"User Profile Context: Preferred City={user_profile.get('preferred_city', 'Kanpur')}, Language={user_profile.get('language', 'en')}"
             messages.append({"role": "system", "content": profile_str})
+
+        if location and location.get("lat") is not None and location.get("lng") is not None:
+            messages.append(
+                {
+                    "role": "system",
+                    "content": (
+                        f"Current user location (browser geolocation): lat={location['lat']}, "
+                        f"lng={location['lng']}. Pass these as user_lat/user_lon when calling "
+                        "search_places or search_nearby so distance ranking uses the user's real position."
+                    ),
+                }
+            )
 
         # Recent N messages window (e.g. last 6 messages)
         if history:
