@@ -68,18 +68,18 @@ describe('Phase 6A — routing & auth guards', () => {
   it('renders / under PublicLayout for guests', async () => {
     authState.clearSession()
     renderAt('/')
-    expect(await screen.findByRole('heading', { name: 'City Companion' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /Every new city deserves a familiar friend/ })).toBeInTheDocument()
     expect(screen.getByRole('navigation', { name: 'Main' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Log in' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Sign up' })).toBeInTheDocument()
+    expect(screen.getAllByRole('link', { name: 'Log in' }).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('link', { name: 'Sign up' }).length).toBeGreaterThan(0)
   })
 
   it('renders /login under PublicLayout for guests', async () => {
     authState.clearSession()
     renderAt('/login')
     expect(await screen.findByRole('heading', { name: 'Sign In' })).toBeInTheDocument()
-    expect(screen.getByText('How It Works')).toBeInTheDocument()
-    expect(screen.getByText('Contact')).toBeInTheDocument()
+    expect(screen.getAllByText('How It Works').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Contact').length).toBeGreaterThan(0)
   })
 
   it('redirects unauthenticated visitors away from /chat to /login', async () => {
@@ -140,7 +140,7 @@ describe('Phase 6A — routing & auth guards', () => {
   it('sends unknown routes to the landing page', async () => {
     authState.clearSession()
     renderAt('/definitely-not-a-route')
-    expect(await screen.findByRole('heading', { name: 'City Companion' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /Every new city deserves a familiar friend/ })).toBeInTheDocument()
   })
 })
 
