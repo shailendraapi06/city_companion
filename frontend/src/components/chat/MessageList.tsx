@@ -1,12 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import { useUIContext } from '../../context/UIContext'
-import type { Message } from '../../types'
+import type { Message, ThinkingStage } from '../../types'
 import { AIMessage } from './AIMessage'
+import { FollowUpChips } from './FollowUpChips'
+import { ThinkingIndicator, THINKING_STAGES } from './ThinkingIndicator'
 import { UserMessage } from './UserMessage'
 
 interface MessageListProps {
   messages: Message[]
   isTyping?: boolean
+  thinkingStage?: ThinkingStage | null
+  onPickFollowUp?: (prompt: string) => void
 }
 
 function isAtBottom(el: HTMLElement): boolean {
@@ -28,12 +32,18 @@ function scrollToBottom(el: HTMLElement, smooth: boolean): void {
 /*
  * UI_UX_Brief.md §6.3 — auto-scroll only when the user is already at the bottom
  * of the chat; otherwise surface a "↓ New response" affordance instead of
- * yanking their scroll position. Phase 6D scaffold works against the mock list.
+ * yanking their scroll position. §6.1 thinking state renders the stage-aware
+ * ThinkingIndicator; §4.5 follow-up chips appear after the latest AI turn and
+ * pre-fill the composer (both tested against scrollable mock lists).
  */
-export function MessageList({ messages, isTyping = false }: MessageListProps) {
+export function MessageList({ messages, isTyping = false, thinkingStage = null, onPickFollowUp }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const { reduceMotion } = useUIContext()
   const [showJumpToLatest, setShowJumpToLatest] = useState(false)
+
+  const isThinking = isTyping || thinkingStage !== null
+  const activeStage = thinkingStage ?? (isTyping ? THINKING_STAGES[0].key : null)
+  const lastIsAssistant = messages.length > 0 && messages[messages.length - 1].role === 'assistant'
 
   useEffect(() => {
     const el = containerRef.current
@@ -47,7 +57,7 @@ export function MessageList({ messages, isTyping = false }: MessageListProps) {
     } else {
       setShowJumpToLatest(true)
     }
-  }, [messages.length, isTyping, reduceMotion])
+  }, [messages.length, isTyping, thinkingStage, reduceMotion])
 
   const handleScroll = () => {
     const el = containerRef.current
@@ -65,18 +75,15 @@ export function MessageList({ messages, isTyping = false }: MessageListProps) {
   return (
     <div ref={containerRef} data-testid="message-list" onScroll={handleScroll} className="relative flex-1 overflow-y-auto px-4 py-6 sm:px-6">
       <div className="mx-auto flex max-w-3xl flex-col gap-5">
-        {messages.map((message) =>
-          message.role === 'user' ? (
-            <UserMessage key={message.id} message={message} />
-          ) : (
-            <AIMessage key={message.id} message={message} />
-          )
-        )}
-        {isTyping ? (
-          <div className="flex items-center gap-2 text-sm text-text-tertiary" role="status" aria-live="polite">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent-1" />
-            Thinking…
+        {messages.map((message) => (
+          <div key={message.id} className="anim-fade-up">
+            {message.role === 'user' ? <UserMessage message={message} /> : <AIMessage message={message} />}
           </div>
+        ))}
+        {isThinking ? (
+          <ThinkingIndicator stage={activeStage} />
+        ) : lastIsAssistant && onPickFollowUp ? (
+          <FollowUpChips onPick={onPickFollowUp} />
         ) : null}
       </div>
 

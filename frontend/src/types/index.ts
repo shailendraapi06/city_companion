@@ -362,6 +362,13 @@ export interface FeedbackResult {
 
 export type ChatStatus = 'idle' | 'sending' | 'streaming' | 'error'
 
+/*
+ * Backend "thinking" stage shown by the ThinkingIndicator (UI_UX_Brief.md §6.1).
+ * Mirrors the server-side chain of work for a request. In the mock flow these are
+ * simulated; Phase 8 drives this type from real streamed stage events.
+ */
+export type ThinkingStage = 'understanding' | 'finding' | 'ranking' | 'finalizing'
+
 export interface ChatLocation {
   lat: number
   lng: number

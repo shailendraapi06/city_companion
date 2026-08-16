@@ -17,7 +17,7 @@ export function ChatPage() {
   const navigate = useNavigate()
   const { messages, status } = useConversation(paramId ?? null)
   const { send, isSending } = useSendMessage()
-  const { setLocation } = useChat()
+  const { setLocation, thinkingStage } = useChat()
   const { location } = useGeolocation()
   const [draft, setDraft] = useState('')
 
@@ -41,10 +41,12 @@ export function ChatPage() {
       <ChatWindow
         messages={messages}
         isSending={isSending || status === 'sending'}
+        thinkingStage={thinkingStage}
         draft={draft}
         onDraftChange={setDraft}
         onSend={handleSend}
         onPickPrompt={handlePickPrompt}
+        onPickFollowUp={handlePickPrompt}
       />
     </div>
   )

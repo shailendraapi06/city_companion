@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useReducer,
 import type { ReactNode } from 'react'
 import { mockMessagesByConversation } from '../data/mockChat'
 import { visualHierarchyPayload, markdownFeaturesPayload, everyBlockTypePayload } from '../test/mocks/aiResponses'
-import type { Block, ChatLocation, ChatStatus, Message } from '../types'
+import type { Block, ChatLocation, ChatStatus, Message, ThinkingStage } from '../types'
 
 /*
  * Chat/session state per Frontend_Architecture.md §5.2:
@@ -10,6 +10,7 @@ import type { Block, ChatLocation, ChatStatus, Message } from '../types'
  *   conversationId: string | null,
  *   messages: Message[],   // includes response_data blocks for assistant messages
  *   status: 'idle' | 'sending' | 'streaming' | 'error',   // streaming = V2-ready, unused until V2
+ *   thinkingStage: 'understanding' | 'finding' | 'ranking' | 'finalizing' | null,  // §6.1
  *   location: { lat, lng } | null,
  *   locationOverride: string | null,
  * }
@@ -23,12 +24,23 @@ import type { Block, ChatLocation, ChatStatus, Message } from '../types'
 
 const MOCK_REPLY_DELAY_MS = 500
 
+/*
+ * Mock-only: the mock round-trip steps through the ThinkingIndicator stages
+ * (UI_UX_Brief.md §6.1) before replying, so the shell exercises the same stage
+ * contract Phase 8 will feed from real streamed events. `thinkingStage` is
+ * `null` unless the mock is mid-reply.
+ */
+const MOCK_STAGE_STEP_MS = 125
+
+const MOCK_STAGE_SEQUENCE: ThinkingStage[] = ['understanding', 'finding', 'ranking', 'finalizing']
+
 const MOCK_REPLY_BLOCKS: Block[][] = [visualHierarchyPayload, markdownFeaturesPayload, everyBlockTypePayload]
 
 interface ChatState {
   conversationId: string | null
   messages: Message[]
   status: ChatStatus
+  thinkingStage: ThinkingStage | null
   location: ChatLocation | null
   locationOverride: string | null
 }
@@ -40,23 +52,26 @@ type ChatAction =
   | { type: 'APPEND_USER_MESSAGE'; message: Message }
   | { type: 'APPEND_ASSISTANT_MESSAGE'; message: Message }
   | { type: 'SET_STATUS'; status: ChatStatus }
+  | { type: 'SET_THINKING_STAGE'; stage: ThinkingStage | null }
   | { type: 'SET_LOCATION'; location: ChatLocation | null }
   | { type: 'SET_LOCATION_OVERRIDE'; override: string | null }
 
 function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
     case 'SELECT_CONVERSATION':
-      return { ...state, conversationId: action.conversationId, messages: action.messages, status: 'idle' }
+      return { ...state, conversationId: action.conversationId, messages: action.messages, status: 'idle', thinkingStage: null }
     case 'SET_CONVERSATION_ID':
       return { ...state, conversationId: action.conversationId }
     case 'RESET':
-      return { ...state, conversationId: null, messages: [], status: 'idle' }
+      return { ...state, conversationId: null, messages: [], status: 'idle', thinkingStage: null }
     case 'APPEND_USER_MESSAGE':
       return { ...state, messages: [...state.messages, action.message] }
     case 'APPEND_ASSISTANT_MESSAGE':
-      return { ...state, messages: [...state.messages, action.message], status: 'idle' }
+      return { ...state, messages: [...state.messages, action.message], status: 'idle', thinkingStage: null }
     case 'SET_STATUS':
       return { ...state, status: action.status }
+    case 'SET_THINKING_STAGE':
+      return { ...state, thinkingStage: action.stage }
     case 'SET_LOCATION':
       return { ...state, location: action.location }
     case 'SET_LOCATION_OVERRIDE':
@@ -70,6 +85,7 @@ const INITIAL_STATE: ChatState = {
   conversationId: null,
   messages: [],
   status: 'idle',
+  thinkingStage: null,
   location: null,
   locationOverride: null,
 }
@@ -97,11 +113,12 @@ function buildMockReply(userText: string, conversationId: string): Message {
 
 export function ChatProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(chatReducer, INITIAL_STATE)
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const mockTimersRef = useRef<ReturnType<typeof setTimeout>[]>([])
 
   useEffect(() => {
     return () => {
-      if (timerRef.current) clearTimeout(timerRef.current)
+      mockTimersRef.current.forEach(clearTimeout)
+      mockTimersRef.current = []
     }
   }, [])
 
@@ -139,16 +156,25 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       }
       dispatch({ type: 'APPEND_USER_MESSAGE', message: userMessage })
       dispatch({ type: 'SET_STATUS', status: 'sending' })
+      dispatch({ type: 'SET_THINKING_STAGE', stage: MOCK_STAGE_SEQUENCE[0] })
 
       const conversationId = state.conversationId ?? `mock-conv-${Date.now()}`
       if (!state.conversationId) {
         dispatch({ type: 'SET_CONVERSATION_ID', conversationId })
       }
 
-      if (timerRef.current) clearTimeout(timerRef.current)
-      timerRef.current = setTimeout(() => {
-        dispatch({ type: 'APPEND_ASSISTANT_MESSAGE', message: buildMockReply(trimmed, conversationId) })
-      }, MOCK_REPLY_DELAY_MS)
+      mockTimersRef.current.forEach(clearTimeout)
+      mockTimersRef.current = []
+      MOCK_STAGE_SEQUENCE.slice(1).forEach((stage, index) => {
+        mockTimersRef.current.push(
+          setTimeout(() => dispatch({ type: 'SET_THINKING_STAGE', stage }), MOCK_STAGE_STEP_MS * (index + 1)),
+        )
+      })
+      mockTimersRef.current.push(
+        setTimeout(() => {
+          dispatch({ type: 'APPEND_ASSISTANT_MESSAGE', message: buildMockReply(trimmed, conversationId) })
+        }, MOCK_REPLY_DELAY_MS),
+      )
 
       return conversationId
     },

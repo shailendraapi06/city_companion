@@ -8,6 +8,7 @@ function Harness() {
     <div>
       <span data-testid="conv">{ctx.conversationId ?? 'null'}</span>
       <span data-testid="status">{ctx.status}</span>
+      <span data-testid="stage">{ctx.thinkingStage ?? 'null'}</span>
       <span data-testid="count">{ctx.messages.length}</span>
       <span data-testid="loc">{ctx.location ? `${ctx.location.lat}` : 'none'}</span>
       <span data-testid="override">{ctx.locationOverride ?? 'null'}</span>
@@ -89,5 +90,25 @@ describe('ChatContext (Phase 6D — §5.2 documented state shape)', () => {
     })
     expect(screen.getByTestId('status')).toHaveTextContent('idle')
     expect(screen.getByTestId('count')).toHaveTextContent('2')
+  })
+
+  it('steps through the §6.1 thinking stages during a mock reply, then clears them', async () => {
+    vi.useFakeTimers()
+    render(
+      <ChatProvider>
+        <Harness />
+      </ChatProvider>,
+    )
+    fireEvent.click(screen.getByText('send'))
+    expect(screen.getByTestId('stage')).toHaveTextContent('understanding')
+    await act(async () => {
+      vi.advanceTimersByTime(250)
+    })
+    expect(screen.getByTestId('stage')).toHaveTextContent('ranking')
+    await act(async () => {
+      vi.advanceTimersByTime(350)
+    })
+    expect(screen.getByTestId('status')).toHaveTextContent('idle')
+    expect(screen.getByTestId('stage')).toHaveTextContent('null')
   })
 })

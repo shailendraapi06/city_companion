@@ -43,4 +43,10 @@ describe('ChatPage (Phase 6D — chat shell)', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Find affordable food/ }))
     expect(screen.getByRole('textbox', { name: 'Message composer' })).toHaveValue('Find affordable food')
   })
+
+  it('pre-fills the composer from a follow-up chip after an AI response', async () => {
+    renderAt('/chat/mock-conv-1')
+    fireEvent.click(await screen.findByRole('button', { name: 'Follow-up suggestion: Show cheaper' }))
+    expect(screen.getByRole('textbox', { name: 'Message composer' })).toHaveValue('Show me cheaper options')
+  })
 })
