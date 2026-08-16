@@ -42,6 +42,8 @@ vi.mock('../lib/api/client', () => ({
   registerApi: async () => ({ user: authState.getUser(), access_token: 'a', refresh_token: 'r' }),
   refreshApi: async () => ({ access_token: 'a' }),
   logoutApi: async () => ({ success: true, data: null, error: null }),
+  updateProfileApi: async () => authState.getUser(),
+  deleteAccountApi: async () => null,
   apiRequest: async (path: string) => {
     if (path.startsWith('/api/saved-places')) {
       return { results: [], count: 0, page: 1, page_size: 20, total_pages: 1 }

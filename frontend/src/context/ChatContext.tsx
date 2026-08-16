@@ -13,6 +13,8 @@ import type { Block, ChatLocation, ChatStatus, Message, ThinkingStage } from '..
  *   thinkingStage: 'understanding' | 'finding' | 'ranking' | 'finalizing' | null,  // §6.1
  *   location: { lat, lng } | null,
  *   locationOverride: string | null,
+ *   locationError: string | null,
+ *   locationSupported: boolean,
  * }
  *
  * Phase 6D: the shell runs against mock conversation data. `openConversation`
@@ -43,6 +45,8 @@ interface ChatState {
   thinkingStage: ThinkingStage | null
   location: ChatLocation | null
   locationOverride: string | null
+  locationError: string | null
+  locationSupported: boolean
 }
 
 type ChatAction =
@@ -55,6 +59,8 @@ type ChatAction =
   | { type: 'SET_THINKING_STAGE'; stage: ThinkingStage | null }
   | { type: 'SET_LOCATION'; location: ChatLocation | null }
   | { type: 'SET_LOCATION_OVERRIDE'; override: string | null }
+  | { type: 'SET_LOCATION_ERROR'; error: string | null }
+  | { type: 'SET_LOCATION_SUPPORTED'; supported: boolean }
 
 function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
@@ -73,9 +79,13 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'SET_THINKING_STAGE':
       return { ...state, thinkingStage: action.stage }
     case 'SET_LOCATION':
-      return { ...state, location: action.location }
+      return { ...state, location: action.location, locationError: null }
     case 'SET_LOCATION_OVERRIDE':
       return { ...state, locationOverride: action.override }
+    case 'SET_LOCATION_ERROR':
+      return { ...state, locationError: action.error }
+    case 'SET_LOCATION_SUPPORTED':
+      return { ...state, locationSupported: action.supported }
     default:
       return state
   }
@@ -88,6 +98,8 @@ const INITIAL_STATE: ChatState = {
   thinkingStage: null,
   location: null,
   locationOverride: null,
+  locationError: null,
+  locationSupported: false,
 }
 
 interface ChatContextType extends ChatState {
@@ -96,6 +108,7 @@ interface ChatContextType extends ChatState {
   sendMessage: (text: string) => string
   setLocation: (location: ChatLocation | null) => void
   setLocationOverride: (override: string | null) => void
+  requestLocation: () => void
 }
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined)
@@ -141,6 +154,37 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const setLocationOverride = useCallback((override: string | null) => {
     dispatch({ type: 'SET_LOCATION_OVERRIDE', override })
   }, [])
+
+  /*
+   * Geolocation capture (UI_UX_Brief.md §8 / APP_FLOW.md §9 / Frontend_Architecture.md
+   * §6.4). The permission prompt is only ever requested once per app-shell mount;
+   * denial or lack of support resolves to a non-fatal state so the shell keeps
+   * working without location. The captured lat/lng is held in `location`, ready
+   * to be attached to /api/chat/ calls once Phase 8 wires that endpoint.
+   */
+  const requestLocation = useCallback(() => {
+    if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
+      dispatch({ type: 'SET_LOCATION_SUPPORTED', supported: false })
+      return
+    }
+    dispatch({ type: 'SET_LOCATION_SUPPORTED', supported: true })
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        dispatch({
+          type: 'SET_LOCATION',
+          location: { lat: position.coords.latitude, lng: position.coords.longitude },
+        })
+      },
+      (err) => {
+        dispatch({ type: 'SET_LOCATION_ERROR', error: err.message })
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    )
+  }, [])
+
+  useEffect(() => {
+    requestLocation()
+  }, [requestLocation])
 
   const sendMessage = useCallback(
     (text: string): string => {
@@ -189,8 +233,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       sendMessage,
       setLocation,
       setLocationOverride,
+      requestLocation,
     }),
-    [state, openConversation, startNewChat, sendMessage, setLocation, setLocationOverride]
+    [state, openConversation, startNewChat, sendMessage, setLocation, setLocationOverride, requestLocation]
   )
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>

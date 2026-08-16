@@ -1,5 +1,6 @@
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { restoreGeolocation, stubGeolocation } from '../test/geolocation'
 import { ChatProvider, useChat } from './ChatContext'
 
 function Harness() {
@@ -30,6 +31,7 @@ function Harness() {
 
 afterEach(() => {
   cleanup()
+  restoreGeolocation()
   vi.useRealTimers()
 })
 
@@ -110,5 +112,66 @@ describe('ChatContext (Phase 6D — §5.2 documented state shape)', () => {
     })
     expect(screen.getByTestId('status')).toHaveTextContent('idle')
     expect(screen.getByTestId('stage')).toHaveTextContent('null')
+  })
+})
+
+function LocationHarness() {
+  const ctx = useChat()
+  return (
+    <div>
+      <span data-testid="loc">{ctx.location ? String(ctx.location.lat) : 'none'}</span>
+      <span data-testid="locerr">{ctx.locationError ?? 'null'}</span>
+      <span data-testid="supported">{String(ctx.locationSupported)}</span>
+      <button onClick={() => ctx.requestLocation()}>request again</button>
+    </div>
+  )
+}
+
+describe('ChatContext (Phase 7E — geolocation capture, §6.4 / §8)', () => {
+  it('captures device location once when geolocation is supported', async () => {
+    stubGeolocation({ lat: 12.9, lng: 77.6 })
+    render(
+      <ChatProvider>
+        <LocationHarness />
+      </ChatProvider>,
+    )
+    expect(screen.getByTestId('supported')).toHaveTextContent('true')
+    await waitFor(() => expect(screen.getByTestId('loc')).toHaveTextContent('12.9'))
+  })
+
+  it('marks geolocation unsupported without crashing (jsdom has no geolocation)', () => {
+    render(
+      <ChatProvider>
+        <LocationHarness />
+      </ChatProvider>,
+    )
+    expect(screen.getByTestId('supported')).toHaveTextContent('false')
+    expect(screen.getByTestId('loc')).toHaveTextContent('none')
+    expect(screen.getByTestId('locerr')).toHaveTextContent('null')
+  })
+
+  it('re-requests location via requestLocation() and replaces the captured position', async () => {
+    stubGeolocation({ lat: 12.9, lng: 77.6 })
+    render(
+      <ChatProvider>
+        <LocationHarness />
+      </ChatProvider>,
+    )
+    await waitFor(() => expect(screen.getByTestId('loc')).toHaveTextContent('12.9'))
+
+    stubGeolocation({ lat: 40.7, lng: 74.0 })
+    fireEvent.click(screen.getByText('request again'))
+    await waitFor(() => expect(screen.getByTestId('loc')).toHaveTextContent('40.7'))
+  })
+
+  it('records a non-fatal error when the permission is denied', async () => {
+    stubGeolocation()
+    render(
+      <ChatProvider>
+        <LocationHarness />
+      </ChatProvider>,
+    )
+    await waitFor(() => expect(screen.getByTestId('locerr')).toHaveTextContent('User denied geolocation'))
+    expect(screen.getByTestId('loc')).toHaveTextContent('none')
   })
 })

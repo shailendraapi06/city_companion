@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
-import { useChat } from '../../context/ChatContext'
 import { Brand } from './Brand'
+import { LocationIndicator } from './LocationIndicator'
 
 interface AppHeaderProps {
   onOpenDrawer: () => void
@@ -9,15 +9,12 @@ interface AppHeaderProps {
 
 export function AppHeader({ onOpenDrawer }: AppHeaderProps) {
   const { user } = useAuth()
-  const { location, locationOverride } = useChat()
   const initials = (user?.name ?? 'U')
     .split(' ')
     .filter(Boolean)
     .slice(0, 2)
     .map((part) => part[0].toUpperCase())
     .join('')
-
-  const locationLabel = locationOverride ?? (location ? 'Using current location' : 'Kanpur')
 
   return (
     <header className="glass sticky top-0 z-40 border-b border-border">
@@ -49,26 +46,7 @@ export function AppHeader({ onOpenDrawer }: AppHeaderProps) {
         </div>
 
         <div className="flex items-center gap-1.5 sm:gap-2">
-          <span
-            title="Current city — geolocation and manual override arrive with chat wiring (Phase 7)"
-            className="hidden items-center gap-1.5 rounded-full border border-border bg-bg-2 px-3 py-1.5 text-xs font-medium text-text-secondary md:inline-flex"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="h-3.5 w-3.5 text-accent-1"
-              aria-hidden="true"
-            >
-              <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
-              <circle cx="12" cy="10" r="3" />
-            </svg>
-            {locationLabel}
-          </span>
+          <LocationIndicator />
 
           <Link to="/chat" className="btn-ghost">
             <svg

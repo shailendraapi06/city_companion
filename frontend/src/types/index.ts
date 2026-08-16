@@ -252,6 +252,13 @@ export interface User {
   profile?: UserProfile | null
 }
 
+/** Body for PATCH /api/auth/me/ (UserProfileUpdateSerializer). */
+export interface UserProfileUpdate {
+  name?: string
+  preferred_city?: string | null
+  language?: string | null
+}
+
 export interface AuthTokens {
   access_token: string
   refresh_token: string

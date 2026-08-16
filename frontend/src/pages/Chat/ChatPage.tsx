@@ -1,29 +1,24 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ChatWindow } from '../../components/chat/ChatWindow'
 import { useChat } from '../../context/ChatContext'
 import { useConversation } from '../../hooks/useConversation'
-import { useGeolocation } from '../../hooks/useGeolocation'
 import { useSendMessage } from '../../hooks/useSendMessage'
 
 /*
  * Handles both /chat (fresh) and /chat/:conversationId. Phase 6D: conversation
- * history comes from mock data seeded into ChatContext; geolocation is captured
- * once and surfaced to the shell (Frontend_Architecture.md §6.4). Sending works
- * against the mock round-trip until Phase 8 wires POST /api/chat/.
+ * history comes from mock data seeded into ChatContext. Geolocation capture
+ * lives in ChatProvider (requested once per app-shell mount, §6.4) — this page
+ * only consumes the captured/overridden location. Sending works against the
+ * mock round-trip until Phase 8 wires POST /api/chat/.
  */
 export function ChatPage() {
   const { conversationId: paramId } = useParams<{ conversationId?: string }>()
   const navigate = useNavigate()
   const { messages, status } = useConversation(paramId ?? null)
   const { send, isSending } = useSendMessage()
-  const { setLocation, thinkingStage } = useChat()
-  const { location } = useGeolocation()
+  const { thinkingStage } = useChat()
   const [draft, setDraft] = useState('')
-
-  useEffect(() => {
-    if (location) setLocation(location)
-  }, [location, setLocation])
 
   const handleSend = (text: string) => {
     const id = send(text)

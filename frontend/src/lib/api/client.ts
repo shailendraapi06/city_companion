@@ -1,4 +1,4 @@
-import type { ApiEnvelope, AuthData, RefreshTokenData, User } from '../../types'
+import type { ApiEnvelope, AuthData, RefreshTokenData, User, UserProfileUpdate } from '../../types'
 
 const API_BASE_URL = (
   (import.meta.env?.VITE_API_BASE_URL as string | undefined) ??
@@ -189,5 +189,24 @@ export function logoutApi(refreshToken?: string | null): Promise<null> {
 
 export function getMeApi(): Promise<User> {
   return apiRequest<User>('/api/auth/me/')
+}
+
+/*
+ * Phase 4C profile-update contract (final chosen path — PATCH /api/auth/me/,
+ * MeView + UserProfileUpdateSerializer): updates name / preferred_city /
+ * language and returns the refreshed User shape.
+ */
+export function updateProfileApi(data: UserProfileUpdate): Promise<User> {
+  return apiRequest<User>('/api/auth/me/', {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  })
+}
+
+/* Phase 4C account deletion — DELETE /api/auth/me/ (204 No Content, cascades). */
+export function deleteAccountApi(): Promise<null> {
+  return apiRequest<null>('/api/auth/me/', {
+    method: 'DELETE',
+  })
 }
 

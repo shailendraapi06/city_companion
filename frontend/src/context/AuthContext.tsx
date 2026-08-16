@@ -21,6 +21,8 @@ interface AuthContextType {
   register: (name: string, email: string, password: string) => Promise<User>
   logout: () => Promise<void>
   refresh: () => Promise<void>
+  updateUser: (user: User) => void
+  resetSession: () => void
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -103,6 +105,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  const updateUser = (updated: User): void => {
+    setUser(updated)
+  }
+
+  const resetSession = (): void => {
+    clearStoredTokens()
+    setUser(null)
+    setAccessToken(null)
+  }
+
   const value: AuthContextType = {
     user,
     accessToken,
@@ -112,6 +124,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     register,
     logout,
     refresh,
+    updateUser,
+    resetSession,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

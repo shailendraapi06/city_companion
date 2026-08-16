@@ -39,13 +39,15 @@ function extractPlace(block: Block | undefined): PlaceResult | null {
 interface PlaceCardProps {
   block?: Block
   place?: PlaceResult
+  /** True when the place is already saved (e.g. rendered on the Saved Places page). */
+  initialSaved?: boolean
   className?: string
 }
 
-export function PlaceCard({ block, place, className }: PlaceCardProps) {
+export function PlaceCard({ block, place, initialSaved = false, className }: PlaceCardProps) {
   const resolvedPlace = place ?? extractPlace(block)
   const { openPlaceDetails } = usePlaceDetails()
-  const { isSaved, saving, toggleSave, error } = usePlaceSave(resolvedPlace?.place_id)
+  const { isSaved, saving, toggleSave, error } = usePlaceSave(resolvedPlace?.place_id, initialSaved)
   if (!resolvedPlace) return null
 
   const whyThis = buildWhyThis(resolvedPlace)

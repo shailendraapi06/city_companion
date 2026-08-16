@@ -28,3 +28,10 @@ export function getConversation(id: string): Promise<Conversation> {
 export function getConversationMessages(id: string): Promise<ConversationMessagesData> {
   return apiRequest<ConversationMessagesData>(`/api/conversations/${id}/messages/`)
 }
+
+/* Phase 4C conversation deletion — DELETE /api/conversations/{id}/ (204). */
+export function deleteConversation(id: string): Promise<null> {
+  return apiRequest<null>(`/api/conversations/${id}/`, {
+    method: 'DELETE',
+  })
+}
