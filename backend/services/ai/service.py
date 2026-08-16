@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 
 from services.ai.client import OpenAIClientWrapper
 from services.ai.parser import AIValidationError, validate_and_normalize_ai_response
@@ -19,6 +20,54 @@ NO_STRONG_MATCH_NOTE = (
     "Note: No places strongly matched the exact budget/location criteria. "
     "Kindly inform the user gracefully and suggest expanding their budget or search radius."
 )
+
+
+class AIUnavailableError(Exception):
+    """Raised when BOTH the AI client AND the deterministic data fallback fail
+    (API_Specification.md §5.6). The HTTP layer maps this to 503 AI_UNAVAILABLE."""
+
+
+# Emergency fast-path constants (PRD §6.4 FR14/FR15, APP_FLOW.md §11).
+DEFAULT_KANPUR_LAT = 26.4499
+DEFAULT_KANPUR_LON = 80.3319
+
+EMERGENCY_HOSPITAL_RADIUS_KM = 15.0
+EMERGENCY_TOP_N = 5
+EMERGENCY_WEIGHTS = ScoringWeights(
+    distance=50.0, requirement=10.0, budget=10.0, rating=15.0, quality=15.0
+)
+
+EMERGENCY_INTENT_KEYWORDS = (
+    "accident", "emergency", "urgent", "ambulance",
+    "heart attack", "chest pain", "heavy bleeding", "unconscious",
+    "injured", "injury", "burning", "drowning", "suicide",
+    "fire", "robbery", "thief", "assault", "stabbed", "attacked",
+    "mujhe bachao", "bachao", "madad karo", "accident ho gaya",
+    "medical emergency", "emergency ho gayi",
+)
+
+EMERGENCY_CONTACTS = [
+    {"label": "National Emergency Helpline", "number": "112"},
+    {"label": "Police", "number": "100"},
+    {"label": "Ambulance", "number": "102"},
+]
+
+EMERGENCY_DISCLAIMER = (
+    "If this is an emergency, contact local emergency services immediately — "
+    "Dial 112 (National Emergency), 100 (Police), 102 (Ambulance). "
+    "City Companion is not a substitute for professional emergency services."
+)
+
+# Deterministic keyword → category inference used ONLY by the §5.6 AI-unavailable
+# fallback, so data retrieval can still produce useful ranked results without AI.
+_CATEGORY_KEYWORDS = {
+    "pg": "pg", "hostel": "pg", "mess": "pg",
+    "hotel": "hotel",
+    "cafe": "cafe",
+    "restaurant": "restaurant", "food": "restaurant",
+    "hospital": "hospital",
+    "pharmacy": "pharmacy",
+}
 
 
 class AIService:
@@ -80,14 +129,26 @@ class AIService:
         carry user_lat/user_lon; the deterministic forced-search path uses it
         directly. Passing None (tests, offline) keeps prior behavior unchanged.
         """
+        # 0. Emergency fast-path (PRD §6.4, APP_FLOW.md §11): deterministic,
+        #    verified-data-only response surfaced BEFORE any AI call, so it never
+        #    depends on AI availability and carries zero room for hallucination.
+        if self._detect_emergency(user_message):
+            return self._build_emergency_response(location)
+
         # 1. Assemble context
         messages = self._assemble_context(user_message, history, user_profile, location)
 
-        # 2. Initial AI call
-        ai_resp = self.client.create_chat_completion(
-            messages=messages,
-            tools=TOOLS_DEFINITIONS,
-        )
+        # 2. Initial AI call. If the AI client itself is unavailable (§5.6),
+        #    fall back to a deterministic DB-only path. Only if that data path
+        #    ALSO fails do we raise AIUnavailableError (→ 503 at the HTTP layer).
+        try:
+            ai_resp = self.client.create_chat_completion(
+                messages=messages,
+                tools=TOOLS_DEFINITIONS,
+            )
+        except Exception as exc:
+            logger.warning("AI planning call failed (%s); using deterministic DB fallback.", exc)
+            return self._ai_unavailable_fallback(user_message, location)
 
         choice = ai_resp.get("choices", [{}])[0]
         message_obj = choice.get("message", {})
@@ -132,6 +193,179 @@ class AIService:
                 }
             ]
         return []
+
+    def _detect_emergency(self, user_message: str) -> bool:
+        """Keyword-based emergency-intent detection (PRD §6.4, APP_FLOW.md §11).
+
+        Detected the same way as any other intent — no separate mode toggle.
+        A documented MVP heuristic: strong emergency/medical-distress signals
+        (English + Hindi/Hinglish) trigger the deterministic emergency path."""
+        if not user_message:
+            return False
+        text = user_message.lower()
+        return any(keyword in text for keyword in EMERGENCY_INTENT_KEYWORDS)
+
+    def _build_emergency_response(self, location: dict | None = None) -> dict:
+        """Fast-path emergency response built ONLY from verified data.
+
+        Nearest hospitals (real candidates) ranked by distance, static emergency
+        contacts, Directions/Call/Share-Location actions, and a clear disclaimer.
+        The payload is schema-validated AND run through the SAME mechanical
+        grounding check as every normal response (Fix 1 — deliberately not
+        relaxed). If grounding ever fails, we fall back to a claim-free
+        contacts-only payload rather than risk hallucinating facility details.
+        """
+        lat = DEFAULT_KANPUR_LAT
+        lon = DEFAULT_KANPUR_LON
+        if location and location.get("lat") is not None and location.get("lng") is not None:
+            lat = float(location["lat"])
+            lon = float(location["lng"])
+
+        candidates = self.places_service.search(
+            category="hospital",
+            city="Kanpur",
+            user_lat=lat,
+            user_lon=lon,
+            max_radius_km=EMERGENCY_HOSPITAL_RADIUS_KM,
+            include_external=self.include_external,
+        )
+        scored = self.rec_engine.recommend(
+            candidates,
+            max_radius_km=EMERGENCY_HOSPITAL_RADIUS_KM,
+            weights=EMERGENCY_WEIGHTS,
+        )
+        top = scored[:EMERGENCY_TOP_N]
+        candidate_pool = {sc.candidate.place_id: sc.candidate for sc in top}
+        data = [self._scored_candidate_to_data(sc) for sc in top]
+
+        contacts_items = [f"{c['label']}: {c['number']}" for c in EMERGENCY_CONTACTS]
+        blocks = [
+            {"type": "alert", "level": "danger", "content": EMERGENCY_DISCLAIMER},
+            {
+                "type": "text",
+                "content": (
+                    "This looks like an emergency. The nearest hospitals from our "
+                    "verified data are listed below — please contact emergency "
+                    "services first."
+                ),
+            },
+        ]
+        if data:
+            blocks.append({"type": "recommendation", "items": data})
+
+        blocks.append({"type": "text", "content": "Emergency contacts (India):"})
+        blocks.append({"type": "list", "items": contacts_items})
+
+        if data:
+            first = data[0]
+            blocks.append(
+                {
+                    "type": "action",
+                    "label": "Directions to nearest hospital",
+                    "action_type": "directions",
+                    "payload": {"lat": first["latitude"], "lng": first["longitude"]},
+                }
+            )
+            nearest = top[0].candidate
+            if nearest.phone:
+                blocks.append(
+                    {
+                        "type": "action",
+                        "label": "Call nearest hospital",
+                        "action_type": "call",
+                        "payload": {"phone": nearest.phone},
+                    }
+                )
+        for contact in EMERGENCY_CONTACTS:
+            blocks.append(
+                {
+                    "type": "action",
+                    "label": f"Call {contact['label']} ({contact['number']})",
+                    "action_type": "call",
+                    "payload": {"phone": contact["number"]},
+                }
+            )
+        blocks.append(
+            {
+                "type": "action",
+                "label": "Share my current location",
+                "action_type": "share_location",
+                "payload": {"lat": lat, "lng": lon},
+            }
+        )
+
+        payload = {"message": {"role": "assistant"}, "content": blocks}
+        validated = validate_and_normalize_ai_response(payload)
+
+        result = verify_ai_output(validated, candidate_pool)
+        if not result.ok:
+            logger.error("Emergency response failed grounding verification: %s", result.errors)
+            validated = validate_and_normalize_ai_response(
+                {
+                    "message": {"role": "assistant"},
+                    "content": [
+                        {"type": "alert", "level": "danger", "content": EMERGENCY_DISCLAIMER},
+                        {"type": "text", "content": "Emergency contacts (India):"},
+                        {"type": "list", "items": contacts_items},
+                        {
+                            "type": "action",
+                            "label": "Share my current location",
+                            "action_type": "share_location",
+                            "payload": {"lat": lat, "lng": lon},
+                        },
+                    ],
+                }
+            )
+        return validated
+
+    def _ai_unavailable_fallback(self, user_message: str, location: dict | None) -> dict:
+        """§5.6: AI client is down but Phase 5A/5B still work — return a 200-style
+        payload of raw ranked results plus an 'AI temporarily unavailable' alert.
+
+        Deterministic intent/budget inference replaces the AI's requirement
+        extraction. If the data path ALSO fails (DB down), raise AIUnavailableError
+        so the HTTP layer can return the only-legal hard error: 503 AI_UNAVAILABLE."""
+        args = self._infer_search_params(user_message, location)
+        try:
+            _pool, candidates_data, _note = self._execute_search(args, user_message, top_n=5)
+        except Exception as exc:
+            logger.error("AI unavailable AND data retrieval failed: %s", exc)
+            raise AIUnavailableError(
+                "AI service is temporarily unavailable and no fallback data "
+                "could be retrieved."
+            ) from exc
+        no_match = not candidates_data or all(
+            c.get("match_score", 0) < 35.0 for c in candidates_data
+        )
+        return self._build_fallback_structured_response(
+            candidates_data, no_match=no_match, ai_unavailable=True
+        )
+
+    def _infer_search_params(self, user_message: str, location: dict | None) -> dict:
+        """Best-effort deterministic requirement inference for the §5.6 fallback:
+        category + budget + user coords, with Kanpur as the default city."""
+        text = (user_message or "").lower()
+        args: dict = {"city": "Kanpur"}
+        if location and location.get("lat") is not None and location.get("lng") is not None:
+            args["user_lat"] = float(location["lat"])
+            args["user_lon"] = float(location["lng"])
+        for keyword, category in _CATEGORY_KEYWORDS.items():
+            if keyword in text:
+                args["category"] = category
+                break
+        budget = self._infer_budget(text)
+        if budget is not None:
+            args["max_budget"] = budget
+        return args
+
+    def _infer_budget(self, text: str) -> float | None:
+        match = re.search(r"₹?\s*(\d{3,6})\b", text)
+        if not match:
+            return None
+        amount = float(match.group(1))
+        if 200.0 <= amount <= 200000.0:
+            return amount
+        return None
 
     def _assemble_context(
         self,
@@ -401,7 +635,7 @@ class AIService:
                         }
                     )
                     continue
-                return self._build_fallback_structured_response(candidates_data, no_match)
+                return self._build_fallback_structured_response(candidates_data, no_match, ai_unavailable=True)
 
             # 1) Schema validation (5C parser).
             try:
@@ -412,7 +646,7 @@ class AIService:
                         {"role": "system", "content": self._schema_feedback_message(str(exc))}
                     )
                     continue
-                return self._build_fallback_structured_response(candidates_data, no_match)
+                return self._build_fallback_structured_response(candidates_data, no_match, ai_unavailable=True)
 
             # 2) Mechanical hallucination check (verifier.py) — UNSKIPPABLE.
             result = verify_ai_output(validated, candidates_by_id)
@@ -422,11 +656,11 @@ class AIService:
                         {"role": "system", "content": self._grounding_feedback_message(result.errors)}
                     )
                     continue
-                return self._build_fallback_structured_response(candidates_data, no_match)
+                return self._build_fallback_structured_response(candidates_data, no_match, ai_unavailable=True)
 
             return validated
 
-        return self._build_fallback_structured_response(candidates_data, no_match)
+        return self._build_fallback_structured_response(candidates_data, no_match, ai_unavailable=True)
 
     def _schema_feedback_message(self, detail: str) -> str:
         return (
@@ -483,7 +717,7 @@ class AIService:
         return data
 
     def _build_fallback_structured_response(
-        self, candidates_data: list[dict], no_match: bool
+        self, candidates_data: list[dict], no_match: bool, ai_unavailable: bool = False
     ) -> dict:
         """
         Generates a guaranteed-valid structured block payload as fallback.
@@ -520,6 +754,14 @@ class AIService:
                     "items": candidates_data,
                 }
             )
+            if ai_unavailable:
+                blocks.append(
+                    {
+                        "type": "alert",
+                        "level": "warning",
+                        "content": "AI-generated explanations are temporarily unavailable, so I'm showing the closest ranked results directly from our verified data.",
+                    }
+                )
             blocks.append(
                 {
                     "type": "alert",

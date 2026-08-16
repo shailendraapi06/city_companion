@@ -13,6 +13,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from common.responses import error_response, success_response
+from services.ai.service import AIUnavailableError
 from services.chat.service import ChatService
 
 
@@ -31,10 +32,14 @@ class ChatView(APIView):
                     "content": [ ...structured blocks... ] },
           "error": null }
 
-    Errors (happy-path contract only; resilience is Phase 7B):
+    Errors (resilience contract, §5.6):
         400 VALIDATION_ERROR — empty/missing message, malformed location.
         401 UNAUTHORIZED    — missing/invalid token (DRF default).
         404 NOT_FOUND       — conversation_id belongs to another user.
+        503 AI_UNAVAILABLE  — ONLY when both the AI client AND the deterministic
+                              data fallback fail. Any single-layer failure
+                              (AI down / data down) still returns a 200 with
+                              ranked data or a clarifying fallback.
     """
 
     permission_classes = [IsAuthenticated]
@@ -72,12 +77,20 @@ class ChatView(APIView):
                     status.HTTP_400_BAD_REQUEST,
                 )
 
-        conversation, assistant_message = self.chat_service.process_message(
-            user=request.user,
-            message=message.strip(),
-            conversation_id=data.get("conversation_id"),
-            location=location,
-        )
+        try:
+            conversation, assistant_message = self.chat_service.process_message(
+                user=request.user,
+                message=message.strip(),
+                conversation_id=data.get("conversation_id"),
+                location=location,
+            )
+        except AIUnavailableError:
+            return error_response(
+                "AI_UNAVAILABLE",
+                "The AI service is temporarily unavailable, and we couldn't "
+                "retrieve fallback data either. Please try again in a moment.",
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
         response_data = {
             "conversation_id": str(conversation.id),
