@@ -150,6 +150,33 @@ class AuthAPITests(APITestCase):
         self.assertTrue(response.data["success"])
         self.assertIsNone(response.data["data"])
 
+    def test_logout_blacklists_refresh_token(self):
+        """Logout with a refresh_token must invalidate it server-side: the
+        refresh endpoint must reject it with 401 afterwards.
+
+        Ref: API_Specification.md §2.3 & §2.4. Fix 5: token_blacklist app is
+        installed and LogoutView really calls token.blacklist().
+        """
+        refresh = RefreshToken.for_user(self.user)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {refresh.access_token}")
+
+        response = self.client.post(
+            "/api/auth/logout/", {"refresh_token": str(refresh)}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # Old refresh token must no longer be usable.
+        refresh_response = self.client.post(
+            "/api/auth/refresh/", {"refresh_token": str(refresh)}, format="json"
+        )
+        self.assertEqual(refresh_response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertFalse(refresh_response.data["success"])
+        self.assertEqual(refresh_response.data["error"]["code"], "UNAUTHORIZED")
+
+        # The freshly issued access token is still valid (short-lived window).
+        me_response = self.client.get("/api/auth/me/")
+        self.assertEqual(me_response.status_code, status.HTTP_200_OK)
+
     def test_me_authenticated(self):
         refresh = RefreshToken.for_user(self.user)
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {refresh.access_token}")

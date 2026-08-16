@@ -136,7 +136,7 @@ Register a new user.
 
 **Auth:** required
 
-**Request:** *(empty, or `{ "refresh_token": "string" }` if server-side token blacklisting is used — **[TBD]**)*
+**Request:** `{ "refresh_token": "string" }` — server-side token blacklisting **IS** used: the supplied refresh token is added to the SimpleJWT blacklist (outstanding/blacklisted tables) and any subsequent use of it fails with `401`. *(Decision made; previously `[TBD]`.)*
 
 **Response `200`**
 ```json

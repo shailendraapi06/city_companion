@@ -3,12 +3,12 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.places.models import Place
 from apps.places.serializers import PlaceDetailSerializer
 from apps.saved_places.models import SavedPlace
 from apps.saved_places.serializers import SavedPlaceResponseSerializer
 from common.permissions import get_owned_object_or_404
 from common.responses import error_response, success_response
+from services.places.service import get_place_by_id
 
 
 class PlaceDetailView(APIView):
@@ -21,9 +21,8 @@ class PlaceDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, pk):
-        try:
-            place = Place.objects.get(pk=pk)
-        except (Place.DoesNotExist, ValueError):
+        place = get_place_by_id(pk)
+        if place is None:
             return error_response(
                 "NOT_FOUND", "Place not found.", status.HTTP_404_NOT_FOUND
             )
@@ -42,9 +41,8 @@ class SaveUnsavePlaceView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, pk):
-        try:
-            place = Place.objects.get(pk=pk)
-        except (Place.DoesNotExist, ValueError):
+        place = get_place_by_id(pk)
+        if place is None:
             return error_response(
                 "NOT_FOUND", "Place not found.", status.HTTP_404_NOT_FOUND
             )

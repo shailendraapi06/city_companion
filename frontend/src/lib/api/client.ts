@@ -1,28 +1,64 @@
 import type { ApiEnvelope, AuthData, RefreshTokenData, User } from '../../types'
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000').replace(/\/$/, '')
+const API_BASE_URL = (
+  (import.meta.env?.VITE_API_BASE_URL as string | undefined) ??
+  (globalThis as { process?: { env?: Record<string, string> } }).process?.env
+    ?.VITE_API_BASE_URL ??
+  'http://127.0.0.1:8000'
+).replace(/\/$/, '')
 
 const ACCESS_TOKEN_KEY = 'cc_access_token'
 const REFRESH_TOKEN_KEY = 'cc_refresh_token'
 
+/**
+ * localStorage access with an in-memory fallback. In the browser this is a
+ * no-op passthrough to the real storage; in non-browser runtimes (e.g. Node
+ * test runners) localStorage does not exist, so requests still work against a
+ * real backend. Keys keep the same behavior either way.
+ */
+type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
+
+const memoryStorage: Record<string, string> = {}
+
+function getStorage(): StorageLike {
+  try {
+    if (globalThis.localStorage) {
+      return globalThis.localStorage
+    }
+  } catch {
+    // localStorage access denied (private browsing, etc.) — fall back to memory.
+  }
+  return {
+    getItem: (key) => memoryStorage[key] ?? null,
+    setItem: (key, value) => {
+      memoryStorage[key] = String(value)
+    },
+    removeItem: (key) => {
+      delete memoryStorage[key]
+    },
+  }
+}
+
+const storage = getStorage()
+
 export function getStoredAccessToken(): string | null {
-  return localStorage.getItem(ACCESS_TOKEN_KEY)
+  return storage.getItem(ACCESS_TOKEN_KEY)
 }
 
 export function getStoredRefreshToken(): string | null {
-  return localStorage.getItem(REFRESH_TOKEN_KEY)
+  return storage.getItem(REFRESH_TOKEN_KEY)
 }
 
 export function setStoredTokens(accessToken: string, refreshToken?: string): void {
-  localStorage.setItem(ACCESS_TOKEN_KEY, accessToken)
+  storage.setItem(ACCESS_TOKEN_KEY, accessToken)
   if (refreshToken) {
-    localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken)
+    storage.setItem(REFRESH_TOKEN_KEY, refreshToken)
   }
 }
 
 export function clearStoredTokens(): void {
-  localStorage.removeItem(ACCESS_TOKEN_KEY)
-  localStorage.removeItem(REFRESH_TOKEN_KEY)
+  storage.removeItem(ACCESS_TOKEN_KEY)
+  storage.removeItem(REFRESH_TOKEN_KEY)
 }
 
 export class ApiError extends Error {
@@ -61,6 +97,13 @@ export async function apiRequest<T>(
     headers,
   })
 
+  // 204 No Content: some endpoints (e.g. DELETE .../save/, DELETE /api/auth/me/)
+  // return no body on success (API_Specification.md §2.5, §4.2). Return
+  // immediately before attempting a JSON parse.
+  if (response.status === 204) {
+    return undefined as T
+  }
+
   let envelope: ApiEnvelope<T>
   try {
     envelope = (await response.json()) as ApiEnvelope<T>
@@ -92,7 +135,10 @@ export async function apiRequest<T>(
     )
   }
 
-  if (!response.ok || !envelope.success || envelope.data === null) {
+  // Success is judged solely by the `success` flag. `data` may legitimately be
+  // `null` (e.g. logout returns {"success": true, "data": null, "error": null}
+  // per API_Specification.md §2.4) — that is a successful response.
+  if (!response.ok || !envelope.success) {
     throw new ApiError(
       envelope.error?.message ?? 'The API request failed.',
       envelope.error?.code ?? 'INTERNAL_ERROR',
@@ -100,7 +146,9 @@ export async function apiRequest<T>(
     )
   }
 
-  return envelope.data
+  // `data` may legitimately be null on a successful response (e.g. logout
+  // returns {"success": true, "data": null} per API_Specification.md §2.4).
+  return envelope.data as T
 }
 
 export interface HealthStatus {

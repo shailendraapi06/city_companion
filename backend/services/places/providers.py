@@ -1,9 +1,7 @@
 from dataclasses import dataclass, field
 import json
-import os
 import urllib.parse
 import urllib.request
-from django.conf import settings
 
 from apps.places.models import Place
 from services.location.distance import haversine_distance
@@ -37,6 +35,36 @@ class PlaceCandidate:
     distance_km: float | None = None
 
 
+def place_to_candidate(p: Place, distance_km: float | None = None) -> PlaceCandidate:
+    """Convert a Place ORM row to a provider-agnostic PlaceCandidate.
+
+    Single shared conversion used by InternalDatabaseProvider and by the AI
+    service's `get_place_details`/`compare_places` tool handlers so the exact
+    same real data is always shown (Backend_Schema.md §9.3).
+    """
+    return PlaceCandidate(
+        place_id=str(p.id),
+        name=p.name,
+        category=p.category,
+        description=p.description,
+        address=p.address or "",
+        latitude=float(p.latitude),
+        longitude=float(p.longitude),
+        phone=p.phone,
+        website=p.website,
+        rating=float(p.rating) if p.rating is not None else None,
+        price_range=p.price_range,
+        amenities=p.amenities or [],
+        opening_hours=p.opening_hours,
+        images=p.images or [],
+        attributes=p.attributes or {},
+        source=p.source,
+        verified=p.verified,
+        last_updated=p.last_updated.isoformat() if p.last_updated else None,
+        distance_km=distance_km,
+    )
+
+
 class InternalDatabaseProvider:
     """Provider for querying internal database Place model."""
 
@@ -68,28 +96,7 @@ class InternalDatabaseProvider:
                 if radius_km is not None and dist > radius_km:
                     continue
 
-            cand = PlaceCandidate(
-                place_id=str(p.id),
-                name=p.name,
-                category=p.category,
-                description=p.description,
-                address=p.address or "",
-                latitude=float(p.latitude),
-                longitude=float(p.longitude),
-                phone=p.phone,
-                website=p.website,
-                rating=float(p.rating) if p.rating is not None else None,
-                price_range=p.price_range,
-                amenities=p.amenities or [],
-                opening_hours=p.opening_hours,
-                images=p.images or [],
-                attributes=p.attributes or {},
-                source=p.source,
-                verified=p.verified,
-                last_updated=p.last_updated.isoformat() if p.last_updated else None,
-                distance_km=dist,
-            )
-            candidates.append(cand)
+            candidates.append(place_to_candidate(p, distance_km=dist))
 
         return candidates
 
@@ -97,11 +104,16 @@ class InternalDatabaseProvider:
 class ExternalPlacesProvider:
     """
     Provider for fetching candidate places from external places/maps services.
-    Uses OpenStreetMap / Nominatim API with PLACES_API_KEY fallback integration.
-    """
 
-    def __init__(self):
-        self.api_key = getattr(settings, "PLACES_API_KEY", os.getenv("PLACES_API_KEY"))
+    MVP DECISION (documented, intentional): the external provider is
+    OpenStreetMap / Nominatim's free search API. It requires no API key, which
+    is why PLACES_API_KEY is deliberately NOT used anywhere in this codebase
+    for the MVP. The key was reserved back in Phase 1 for a commercial
+    Places/Maps provider ([TBD] in TRD.md §12/§19); it was removed from
+    .env.example as dead config and this gap is recorded in TRD.md §19. When a
+    commercial provider is integrated, PLACES_API_KEY will be reintroduced
+    and read here.
+    """
 
     def search(
         self,

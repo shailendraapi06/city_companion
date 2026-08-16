@@ -609,6 +609,7 @@ Collected here for quick reference — do **not** build these, even if they seem
 ## 19. Open Questions / TBD Before or During Build
 
 - Exact external Places/Maps API provider (referred to generically throughout; never named).
+  - **RESOLVED for MVP (documented Fix 6):** `ExternalPlacesProvider` uses OpenStreetMap / **Nominatim's free search API**, which requires **no API key**. `PLACES_API_KEY` is therefore intentionally unused and has been removed from `.env.example` as dead config. The key was reserved in Phase 1 for a commercial Places/Maps provider; it will be reintroduced and read in `services/places/providers.py` only if/when such a provider replaces Nominatim.
 - Exact OpenAI model to use, and exact tool/function-calling schema implementation.
 - Streaming transport mechanism: Server-Sent Events vs WebSocket vs chunked HTTP.
 - Final recommendation scoring weights (two example sets exist — needs one config-driven decision).

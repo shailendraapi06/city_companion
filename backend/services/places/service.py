@@ -1,4 +1,5 @@
 import re
+from apps.places.models import Place
 from services.location.distance import haversine_distance
 from services.places.filters import apply_place_filters
 from services.places.providers import (
@@ -6,6 +7,23 @@ from services.places.providers import (
     InternalDatabaseProvider,
     PlaceCandidate,
 )
+
+
+def get_place_by_id(place_id: str) -> Place | None:
+    """
+    Shared single-Place lookup.
+
+    This is the SAME underlying query backing GET /api/places/{id}/ (Phase 4B)
+    and the AI service's `get_place_details` / `compare_places` tool handlers —
+    extracted so the tool wiring and the HTTP endpoint never diverge in
+    behavior. Returns the Place row or None (invalid/missing id).
+    """
+    if not place_id:
+        return None
+    try:
+        return Place.objects.get(pk=place_id)
+    except (Place.DoesNotExist, ValueError):
+        return None
 
 
 class PlaceSearchService:

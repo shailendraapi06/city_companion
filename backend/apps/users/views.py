@@ -1,3 +1,5 @@
+import logging
+
 from django.contrib.auth import authenticate
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -17,6 +19,8 @@ from apps.users.serializers import (
 )
 from common.responses import error_response, success_response
 
+
+logger = logging.getLogger(__name__)
 
 
 class RegisterView(APIView):
@@ -129,7 +133,10 @@ class LogoutView(APIView):
                 token = RefreshToken(refresh_token)
                 token.blacklist()
             except Exception:
-                pass
+                # Logout must always return 200 (API_Specification.md §2.4): the
+                # user session is terminated client-side regardless. Log rather
+                # than swallow silently so blacklisting failures are visible.
+                logger.warning("Logout blacklist failed for refresh token", exc_info=True)
 
         return success_response(data=None, status_code=status.HTTP_200_OK)
 
