@@ -14,11 +14,16 @@ export type BlockType =
 
 export type AlertLevel = 'info' | 'success' | 'warning' | 'error'
 
+export interface PriceRange {
+  amount: number
+  unit: string
+}
+
 export interface PlaceResult {
   place_id: string
   name: string
   category: string
-  price_range?: { amount: number; unit: string } | null
+  price_range?: PriceRange | null
   rating?: number | null
   distance_km?: number | null
   match_score?: number
@@ -210,4 +215,104 @@ export interface AuthData {
 
 export interface RefreshTokenData {
   access_token: string
+}
+
+/* ---------------------------------------------------------------------------
+ * Server-side DTOs (Frontend_Architecture.md §6 — typed API client).
+ * Shapes mirror the Django REST serializers / API_Specification.md exactly.
+ * ------------------------------------------------------------------------- */
+
+/** Standard pagination envelope used by list endpoints. */
+export interface Paginated<T> {
+  results: T[]
+  count: number
+  page: number
+  page_size: number
+  total_pages: number
+}
+
+/** Message history payload from GET /api/conversations/{id}/messages/. */
+export interface ConversationMessagesData {
+  results: Message[]
+}
+
+/** Place summary nested inside GET /api/saved-places/ (SavedPlaceListSerializer). */
+export interface SavedPlaceSummary {
+  id: string
+  name: string
+  category: string
+  price_range: PriceRange | null
+  rating: number | null
+}
+
+export interface SavedPlace {
+  saved_id: string
+  place: SavedPlaceSummary
+  created_at: string
+}
+
+/** Full place detail from GET /api/places/{id}/ (PlaceDetailSerializer). */
+export interface PlaceDetail {
+  id: string
+  name: string
+  category: string
+  description: string | null
+  address: string | null
+  latitude: string | number
+  longitude: string | number
+  phone: string | null
+  website: string | null
+  rating: number | null
+  price_range: PriceRange | null
+  amenities: string[] | null
+  opening_hours: Record<string, unknown> | null
+  images: string[] | null
+  source: string
+  verified: boolean
+  last_updated: string
+  is_saved: boolean
+}
+
+/** Response from POST /api/places/{id}/save/. */
+export interface SavePlaceResult {
+  id: string
+  place_id: string
+  created_at: string
+}
+
+export type FeedbackType = 'up' | 'down'
+
+export type FeedbackReason =
+  | 'too_expensive'
+  | 'too_far'
+  | 'not_available'
+  | 'wrong_information'
+  | 'other'
+
+export interface FeedbackPayload {
+  message_id: string
+  place_id?: string | null
+  type: FeedbackType
+  reason?: FeedbackReason | null
+}
+
+/** Response from POST /api/feedback/ (FeedbackDetailSerializer). */
+export interface FeedbackResult {
+  id: string
+  message_id: string
+  place_id: string | null
+  type: FeedbackType
+  reason: FeedbackReason | null
+  created_at: string
+}
+
+/* ---------------------------------------------------------------------------
+ * Chat session state (Frontend_Architecture.md §5.2).
+ * ------------------------------------------------------------------------- */
+
+export type ChatStatus = 'idle' | 'sending' | 'streaming' | 'error'
+
+export interface ChatLocation {
+  lat: number
+  lng: number
 }

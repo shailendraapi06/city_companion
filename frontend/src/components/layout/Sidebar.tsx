@@ -1,10 +1,34 @@
 import { Link, NavLink } from 'react-router-dom'
+import { mockConversations } from '../../data/mockChat'
+import type { Conversation } from '../../types'
 
 interface SidebarContentProps {
   onNavigate?: () => void
 }
 
+type ConversationGroup = 'Today' | 'Yesterday' | 'Older'
+
+const GROUP_ORDER: ConversationGroup[] = ['Today', 'Yesterday', 'Older']
+
+function groupFor(conversation: Conversation): ConversationGroup {
+  const hours = (Date.now() - new Date(conversation.updated_at).getTime()) / 3_600_000
+  if (hours < 24) return 'Today'
+  if (hours < 48) return 'Yesterday'
+  return 'Older'
+}
+
+/*
+ * Sidebar history (UI_UX_Brief.md §4.3): "+ New Chat", conversations grouped
+ * Today / Yesterday / Older, then Saved Places + Profile/Settings at the bottom.
+ * Phase 6D seeds the list from mock data; Phase 8 swaps `mockConversations`
+ * for the real GET /api/conversations/ query without changing the grouping UI.
+ */
 export function SidebarContent({ onNavigate }: SidebarContentProps) {
+  const grouped = GROUP_ORDER.map((group) => ({
+    group,
+    items: mockConversations.filter((conversation) => groupFor(conversation) === group),
+  }))
+
   return (
     <div className="flex h-full flex-col gap-6 p-4">
       <Link to="/chat" onClick={onNavigate} className="btn-primary w-full">
@@ -25,14 +49,45 @@ export function SidebarContent({ onNavigate }: SidebarContentProps) {
 
       <section aria-label="Conversations">
         <h2 className="field-label px-1">Conversations</h2>
-        <div className="rounded-xl border border-dashed border-border-strong bg-bg-1 p-3.5 text-xs leading-relaxed text-text-tertiary">
-          No conversations yet.
-          <br />
-          Start one above — your history will appear here (Phase 7/8).
-        </div>
+        {mockConversations.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-border-strong bg-bg-1 p-3.5 text-xs leading-relaxed text-text-tertiary">
+            No conversations yet.
+            <br />
+            Start one above — your history will appear here.
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            {grouped.map(({ group, items }) =>
+              items.length === 0 ? null : (
+                <div key={group}>
+                  <p className="px-1 text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">
+                    {group}
+                  </p>
+                  <ul className="mt-1 flex flex-col gap-0.5">
+                    {items.map((conversation) => (
+                      <li key={conversation.id}>
+                        <NavLink
+                          to={`/chat/${conversation.id}`}
+                          onClick={onNavigate}
+                          className={({ isActive }) =>
+                            `nav-link flex w-full items-center gap-2${isActive ? ' nav-link-active' : ''}`
+                          }
+                        >
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm">{conversation.title}</span>
+                          </span>
+                        </NavLink>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )
+            )}
+          </div>
+        )}
       </section>
 
-      <nav className="flex flex-col gap-1" aria-label="App">
+      <nav className="mt-auto flex flex-col gap-1" aria-label="App">
         <NavLink
           to="/saved"
           onClick={onNavigate}

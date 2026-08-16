@@ -1,22 +1,33 @@
-import { useState } from 'react'
 import { Outlet } from 'react-router-dom'
+import { ChatProvider } from '../../context/ChatContext'
+import { UIContextProvider, useUIContext } from '../../context/UIContext'
 import { AppHeader } from './AppHeader'
-import { Sidebar } from './Sidebar'
 import { MobileDrawer } from './MobileDrawer'
+import { Sidebar } from './Sidebar'
 
-export function AppLayout() {
-  const [drawerOpen, setDrawerOpen] = useState(false)
+function AppLayoutInner() {
+  const { sidebarOpen, setSidebarOpen } = useUIContext()
 
   return (
-    <div className="surface-subtle app-shell">
-      <AppHeader onOpenDrawer={() => setDrawerOpen(true)} />
-      <div className="flex flex-1 items-stretch">
-        <Sidebar />
-        <main className="min-w-0 flex-1">
-          <Outlet />
-        </main>
+    <ChatProvider>
+      <div className="surface-subtle app-shell">
+        <AppHeader onOpenDrawer={() => setSidebarOpen(true)} />
+        <div className="flex flex-1 items-stretch">
+          <Sidebar />
+          <main className="min-w-0 flex-1">
+            <Outlet />
+          </main>
+        </div>
+        <MobileDrawer open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       </div>
-      <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
-    </div>
+    </ChatProvider>
+  )
+}
+
+export function AppLayout() {
+  return (
+    <UIContextProvider>
+      <AppLayoutInner />
+    </UIContextProvider>
   )
 }

@@ -42,6 +42,15 @@ vi.mock('../lib/api/client', () => ({
   registerApi: async () => ({ user: authState.getUser(), access_token: 'a', refresh_token: 'r' }),
   refreshApi: async () => ({ access_token: 'a' }),
   logoutApi: async () => ({ success: true, data: null, error: null }),
+  apiRequest: async (path: string) => {
+    if (path.startsWith('/api/saved-places')) {
+      return { results: [], count: 0, page: 1, page_size: 20, total_pages: 1 }
+    }
+    if (path.startsWith('/api/conversations')) {
+      return { results: [], count: 0, page: 1, page_size: 20, total_pages: 1 }
+    }
+    throw new Error(`Unhandled API request in AppRoutes test: ${path}`)
+  },
   ApiError: class ApiError extends Error {},
 }))
 
@@ -91,7 +100,7 @@ describe('Phase 6A — routing & auth guards', () => {
   it('redirects authenticated users from /login to /chat', async () => {
     authState.setSession(user)
     renderAt('/login')
-    expect(await screen.findByText(/rohit@example\.com/)).toBeInTheDocument()
+    expect(await screen.findByText('Rohit Sharma')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Sign In' })).not.toBeInTheDocument()
   })
 
@@ -110,7 +119,7 @@ describe('Phase 6A — routing & auth guards', () => {
   it('renders the AppLayout shell for /chat when authenticated', async () => {
     authState.setSession(user)
     renderAt('/chat')
-    expect(await screen.findByText(/rohit@example\.com/)).toBeInTheDocument()
+    expect(await screen.findByText('Rohit Sharma')).toBeInTheDocument()
     expect(screen.getByRole('complementary')).toBeInTheDocument()
     expect(screen.getAllByText('Conversations').length).toBeGreaterThan(0)
     expect(screen.getAllByRole('link', { name: 'New Chat' }).length).toBeGreaterThan(0)
@@ -120,7 +129,7 @@ describe('Phase 6A — routing & auth guards', () => {
   it('renders /chat/:conversationId when authenticated', async () => {
     authState.setSession(user)
     renderAt('/chat/some-conversation')
-    expect(await screen.findByText(/rohit@example\.com/)).toBeInTheDocument()
+    expect(await screen.findByText('Rohit Sharma')).toBeInTheDocument()
     expect(screen.getByRole('complementary')).toBeInTheDocument()
   })
 
@@ -148,7 +157,7 @@ describe('Phase 6A — mobile drawer', () => {
   it('opens via hamburger, closes via Escape', async () => {
     authState.setSession(user)
     renderAt('/chat')
-    await screen.findByText(/rohit@example\.com/)
+    await screen.findByText('Rohit Sharma')
 
     const dialog = screen.getByRole('dialog', { name: 'App menu' })
     expect(dialog).toHaveAttribute('inert')
@@ -163,7 +172,7 @@ describe('Phase 6A — mobile drawer', () => {
   it('closes when a nav link inside the drawer is clicked', async () => {
     authState.setSession(user)
     renderAt('/chat')
-    await screen.findByText(/rohit@example\.com/)
+    await screen.findByText('Rohit Sharma')
 
     const dialog = screen.getByRole('dialog', { name: 'App menu' })
     fireEvent.click(screen.getByRole('button', { name: 'Open menu' }))
@@ -184,7 +193,7 @@ describe('Phase 6A — motion system', () => {
   it('applies the subtle surface to the authenticated app shell', async () => {
     authState.setSession(user)
     const { container } = renderAt('/chat')
-    await screen.findByText(/rohit@example\.com/)
+    await screen.findByText('Rohit Sharma')
     expect(container.querySelector('.app-shell.surface-subtle')).not.toBeNull()
   })
 
