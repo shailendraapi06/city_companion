@@ -1,50 +1,71 @@
-import { asString, asStringArray } from '../../lib/blockUtils'
-import type { Block, RecommendationItem } from '../../types'
+import { useState } from 'react'
+import { asString, normalizeRecommendationItems, rankLabel } from '../../lib/blockUtils'
+import type { Block } from '../../types'
 import { PlaceCard } from './PlaceCard'
 
 /*
- * PLACEHOLDER — Phase 6C foundation only.
- * Renders a ranked recommendation list (rank chip + reasoning + per-item
- * PlaceCard). Rank/reason hierarchy and rich styling are real Phase 7 work.
+ * Ranked recommendation list (UI_UX_Brief §5.4 / §5.6).
+ *
+ * Rank badges are plain and numeric — "#1 Best Match" for the top pick,
+ * "#2", "#3"… with NO medal emojis. Each entry shows the engine's own reason
+ * plus the full PlaceCard (facts · trust signals · why-this · actions).
+ *
+ * Long result sets collapse to the top 5 with a "Show more" toggle (§5.6).
  */
+export const RECOMMENDATION_VISIBLE_LIMIT = 5
+
 interface RecommendationCardProps {
   block: Block
 }
 
 export function RecommendationCard({ block }: RecommendationCardProps) {
-  const items = Array.isArray(block.items) ? block.items : []
+  const [expanded, setExpanded] = useState(false)
+  const items = normalizeRecommendationItems(block.items as unknown[] | undefined)
   if (items.length === 0) return null
 
   const summary = asString(block.summary)
-  const reasons = asStringArray(block.reasons)
+  const visible = expanded ? items : items.slice(0, RECOMMENDATION_VISIBLE_LIMIT)
 
   return (
-    <section className="space-y-3 rounded-xl border border-border bg-bg-2 p-4">
-      {summary ? <p className="text-sm font-semibold text-text-primary">{summary}</p> : null}
+    <section>
+      {summary ? (
+        <p className="mb-2 text-sm font-medium text-text-secondary">{summary}</p>
+      ) : null}
 
-      <ol className="space-y-3">
-        {items.map((item, index) => {
-          const itemPlace = (item as RecommendationItem).place
-          if (!itemPlace) return null
-          const rank = typeof (item as RecommendationItem).rank === 'number' ? (item as RecommendationItem).rank : index + 1
-          const reason = (item as RecommendationItem).reason ?? reasons[index]
+      <ol className="list-none space-y-3">
+        {visible.map((item) => {
+          const isTop = item.rank === 1
           return (
-            <li key={index} className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent-1 text-[10px] font-bold text-bg-1">
-                  {rank}
+            <li key={`${item.place.place_id}-${item.rank}`}>
+              <div className="mb-1 flex items-center gap-2">
+                <span
+                  className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                    isTop
+                      ? 'border border-accent-1/40 bg-accent-1/10 text-accent-1'
+                      : 'bg-bg-3/70 text-text-secondary'
+                  }`}
+                >
+                  {rankLabel(item.rank)}
                 </span>
-                {reason ? <p className="text-xs text-text-secondary">{reason}</p> : null}
+                {item.reason ? (
+                  <span className="truncate text-xs text-text-tertiary">{item.reason}</span>
+                ) : null}
               </div>
-              <PlaceCard block={{ type: 'place', place: itemPlace, items: [] } as Block} />
+              <PlaceCard place={item.place} />
             </li>
           )
         })}
       </ol>
 
-      <p className="rounded-md bg-bg-3/60 px-2 py-1 text-xs text-text-tertiary">
-        Placeholder card — full recommendation design ships in Phase 7.
-      </p>
+      {items.length > RECOMMENDATION_VISIBLE_LIMIT ? (
+        <button
+          type="button"
+          onClick={() => setExpanded((value) => !value)}
+          className="mt-3 w-full rounded-lg border border-border bg-bg-2 px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:border-accent-1/60 hover:text-accent-1"
+        >
+          {expanded ? 'Show less' : `Show more (${items.length - RECOMMENDATION_VISIBLE_LIMIT} more)`}
+        </button>
+      ) : null}
     </section>
   )
 }

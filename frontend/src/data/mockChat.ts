@@ -1,4 +1,12 @@
-import { everyBlockTypePayload, markdownFeaturesPayload, visualHierarchyPayload } from '../test/mocks/aiResponses'
+import {
+  comparisonPayload,
+  everyBlockTypePayload,
+  longRecommendationPayload,
+  markdownFeaturesPayload,
+  payloadActionBlocks,
+  recommendationPayload,
+  visualHierarchyPayload,
+} from '../test/mocks/aiResponses'
 import type { BlockResponse, Conversation, Message, PlaceResult } from '../types'
 
 /*
@@ -50,12 +58,22 @@ export const mockConversations: Conversation[] = [
     created_at: iso(200),
     updated_at: iso(72),
   },
+  {
+    id: 'mock-conv-6',
+    title: 'Budget stay near HSR Layout',
+    city: 'Bengaluru',
+    created_at: iso(210),
+    updated_at: iso(2),
+  },
 ]
 
 const mockPlace: PlaceResult = {
   name: 'Cozy PGs Indiranagar',
   category: 'PG',
   place_id: 'plc_003',
+  address: '98, 12th Main, Indiranagar, Bengaluru 560038',
+  latitude: 12.9719,
+  longitude: 77.6412,
   price_range: { amount: 650, unit: 'night' },
   source: 'mock',
   verified: false,
@@ -63,6 +81,8 @@ const mockPlace: PlaceResult = {
   rating: 3.9,
   distance_km: 5.8,
   match_score: 76,
+  amenities: ['mess', 'laundry', 'wifi'],
+  score_breakdown: { budget: 28, requirement: 18, distance: 8, rating: 10, quality: 12 },
 }
 
 function asAssistant(content: BlockResponse['content'], id: string, hoursAgo: number, text: string): Message {
@@ -158,5 +178,16 @@ export const mockMessagesByConversation: Record<string, Message[]> = {
   'mock-conv-5': [
     asUser('Compare hostels and PGs for a 3-month stay', 'mock-msg-9', 74),
     asAssistant(everyBlockTypePayload, 'mock-msg-10', 72, 'Hostel vs PG comparison for a 3-month stay.'),
+  ],
+  'mock-conv-6': [
+    asUser('Find a budget stay near HSR Layout for tonight', 'mock-msg-11', 3),
+    asAssistant(
+      [...recommendationPayload, ...comparisonPayload, ...payloadActionBlocks],
+      'mock-msg-12',
+      2,
+      'Budget stays near HSR Layout, compared side by side.',
+    ),
+    asUser('Show me more options', 'mock-msg-13', 1),
+    asAssistant(longRecommendationPayload, 'mock-msg-14', 1, 'Every budget stay I found near your area.'),
   ],
 }

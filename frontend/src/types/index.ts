@@ -19,21 +19,44 @@ export interface PriceRange {
   unit: string
 }
 
+/*
+ * Per-factor match scoring emitted by the backend's Recommendation Engine
+ * (Backend_Schema.md §9.3 PlaceResult.score_breakdown). Each value is that
+ * factor's score contribution (0 → its weight). The "Why this?" checklist on
+ * RecommendationCard is driven from this real per-factor data — never invented
+ * client-side.
+ */
+export interface ScoreBreakdown {
+  budget?: number
+  requirement?: number
+  distance?: number
+  rating?: number
+  quality?: number
+}
+
 export interface PlaceResult {
   place_id: string
   name: string
-  category: string
+  category?: string
+  address?: string | null
+  latitude?: number | null
+  longitude?: number | null
   price_range?: PriceRange | null
   rating?: number | null
   distance_km?: number | null
   match_score?: number
   rank?: number
   reason?: string
+  amenities?: string[] | null
+  score_breakdown?: ScoreBreakdown | null
+  phone?: string | null
+  website?: string | null
   tags?: string[]
   actions?: string[]
-  source: string
-  verified: boolean
-  last_updated: string
+  source?: string
+  verified?: boolean
+  last_updated?: string | null
+  [key: string]: unknown
 }
 
 /*
@@ -91,6 +114,7 @@ export interface ImageBlock {
 export interface PlaceBlock {
   type: 'place'
   place?: PlaceResult | null
+  items?: PlaceResult[] | null
   [key: string]: unknown
 }
 
@@ -101,15 +125,36 @@ export interface RecommendationItem {
   [key: string]: unknown
 }
 
+/**
+ * Recommendation items come in two shapes:
+ *  - legacy nested `{place, rank, reason}` (pre-7C mock payloads), and
+ *  - flat `PlaceResult[]` where the engine embeds `rank`/`reason`/`score_breakdown`
+ *    directly on the item (real backend shape, Backend_Schema.md §9.3).
+ * `normalizeRecommendationItems` in lib/blockUtils.ts normalizes both.
+ */
 export interface RecommendationBlock {
   type: 'recommendation'
-  items?: RecommendationItem[]
+  items?: (RecommendationItem | PlaceResult)[]
+  summary?: string
   [key: string]: unknown
 }
 
+/**
+ * Comparison block. Two shapes are supported:
+ *  - backend `{headers, rows}` (Backend_Schema.md §9.2), and
+ *  - legacy `{items: PlaceResult[]}` which the component derives aligned
+ *    Price / Distance / Food / Rating rows from, matching UI_UX_Brief §5.5.
+ * A natural-language pick is rendered from `explanation`, falling back to
+ * `summary` / `pick` — always the engine's own words, never fabricated.
+ */
 export interface ComparisonBlock {
   type: 'comparison'
+  title?: string
+  headers?: string[]
+  rows?: (string | number)[][]
   items?: PlaceResult[]
+  explanation?: string
+  summary?: string
   [key: string]: unknown
 }
 
@@ -128,7 +173,12 @@ export interface AlertBlock {
 
 export interface ActionBlock {
   type: 'action'
+  /** Legacy string-list of action labels (pre-7C mock payloads). */
   actions?: string[]
+  /** Payload-driven action (backend `action` block, Backend_Schema.md §9.2). */
+  label?: string
+  action_type?: string
+  payload?: Record<string, unknown> | null
   content?: string
   [key: string]: unknown
 }

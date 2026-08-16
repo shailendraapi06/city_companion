@@ -1,6 +1,7 @@
 import { Outlet } from 'react-router-dom'
 import { ChatProvider } from '../../context/ChatContext'
 import { UIContextProvider, useUIContext } from '../../context/UIContext'
+import { PlaceDetailsProvider } from '../places/PlaceDetails'
 import { AppHeader } from './AppHeader'
 import { MobileDrawer } from './MobileDrawer'
 import { Sidebar } from './Sidebar'
@@ -10,16 +11,18 @@ function AppLayoutInner() {
 
   return (
     <ChatProvider>
-      <div className="surface-subtle app-shell">
-        <AppHeader onOpenDrawer={() => setSidebarOpen(true)} />
-        <div className="flex flex-1 items-stretch">
-          <Sidebar />
-          <main className="min-w-0 flex-1">
-            <Outlet />
-          </main>
+      <PlaceDetailsProvider>
+        <div className="surface-subtle app-shell">
+          <AppHeader onOpenDrawer={() => setSidebarOpen(true)} />
+          <div className="flex flex-1 items-stretch">
+            <Sidebar />
+            <main className="min-w-0 flex-1">
+              <Outlet />
+            </main>
+          </div>
+          <MobileDrawer open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
         </div>
-        <MobileDrawer open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      </div>
+      </PlaceDetailsProvider>
     </ChatProvider>
   )
 }
