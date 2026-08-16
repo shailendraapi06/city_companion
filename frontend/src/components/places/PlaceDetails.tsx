@@ -292,7 +292,7 @@ function PlaceDetailsPanel({ detail }: { detail: PlaceDetail }) {
 }
 
 function PlaceDetailsDrawer({ placeId, onClose }: { placeId: string; onClose: () => void }) {
-  const { data, isLoading, isError } = usePlaceDetail(placeId)
+  const { data, isLoading, isError, refetch } = usePlaceDetail(placeId)
   return (
     <PlaceDetailsOverlay onClose={onClose} label="Place details" className="h-full w-full max-w-md">
       <PlaceDetailsBody
@@ -300,13 +300,14 @@ function PlaceDetailsDrawer({ placeId, onClose }: { placeId: string; onClose: ()
         isError={isError}
         detail={data}
         onClose={onClose}
+        onRetry={() => void refetch()}
       />
     </PlaceDetailsOverlay>
   )
 }
 
 function PlaceDetailsSheet({ placeId, onClose }: { placeId: string; onClose: () => void }) {
-  const { data, isLoading, isError } = usePlaceDetail(placeId)
+  const { data, isLoading, isError, refetch } = usePlaceDetail(placeId)
   return (
     <div className="fixed inset-0 z-50" role="presentation">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} aria-hidden="true" />
@@ -321,6 +322,7 @@ function PlaceDetailsSheet({ placeId, onClose }: { placeId: string; onClose: () 
           isError={isError}
           detail={data}
           onClose={onClose}
+          onRetry={() => void refetch()}
         />
       </section>
     </div>
@@ -332,11 +334,13 @@ function PlaceDetailsBody({
   isError,
   detail,
   onClose,
+  onRetry,
 }: {
   isLoading: boolean
   isError: boolean
   detail: PlaceDetail | undefined
   onClose: () => void
+  onRetry: () => void
 }) {
   const header = (
     <div className="flex items-center justify-between border-b border-border p-4">
@@ -362,7 +366,9 @@ function PlaceDetailsBody({
         {header}
         <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center text-sm text-text-tertiary">
           <p>We couldn't load these details right now.</p>
-          <p>Please try again in a moment.</p>
+          <button type="button" onClick={onRetry} className="btn-secondary mt-1">
+            Try Again
+          </button>
         </div>
       </div>
     )

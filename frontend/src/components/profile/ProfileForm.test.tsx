@@ -65,9 +65,12 @@ describe('ProfileForm (Phase 7E — PATCH /api/auth/me/)', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Profile saved.')
   })
 
-  it('shows an error when the patch fails', () => {
-    const { saveProfile } = stubSaveProfile({ isError: true, error: new Error('Server error') })
+  it('shows a friendly error without exposing the technical detail when the patch fails', () => {
+    const { saveProfile } = stubSaveProfile({ isError: true, error: new Error('ECONNREFUSED') })
     render(<ProfileForm user={user} saveProfile={saveProfile} />)
-    expect(screen.getByRole('alert')).toHaveTextContent(/Couldn't save your profile/)
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      "Something went wrong — your profile wasn't saved.",
+    )
+    expect(screen.queryByText(/ECONNREFUSED/)).toBeNull()
   })
 })

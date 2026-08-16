@@ -18,6 +18,10 @@ import type { Block, PlaceResult } from '../../types'
  * A natural-language pick is rendered straight from the payload's own
  * `explanation` (falling back to `summary`) — never fabricated client-side.
  * The block `title` becomes the table's accessible name.
+ *
+ * States (Frontend_Architecture.md §9): an empty comparison block shows a
+ * friendly no-results panel (never a bare header-only table); the table
+ * scrolls horizontally on narrow viewports instead of breaking the layout.
  */
 
 interface ComparisonTableProps {
@@ -29,6 +33,9 @@ export function ComparisonTable({ block }: ComparisonTableProps) {
   const explanation = asString(block.explanation) || asString(block.summary)
 
   if (Array.isArray(block.headers) && Array.isArray(block.rows)) {
+    if (block.rows.length === 0) {
+      return <ComparisonEmpty explanation={explanation} />
+    }
     return (
       <ComparisonTableFrame title={title} explanation={explanation}>
         <thead>
@@ -46,7 +53,7 @@ export function ComparisonTable({ block }: ComparisonTableProps) {
         </thead>
         <tbody>
           {block.rows.map((row: (string | number)[], rowIndex: number) => (
-            <tr key={rowIndex}>
+            <tr key={rowIndex} className="transition-colors hover:bg-bg-3/50">
               {row.map((cell: string | number, cellIndex: number) => (
                 <td
                   key={cellIndex}
@@ -65,7 +72,9 @@ export function ComparisonTable({ block }: ComparisonTableProps) {
   }
 
   const items = Array.isArray(block.items) ? (block.items as PlaceResult[]) : []
-  if (items.length === 0) return null
+  if (items.length === 0) {
+    return <ComparisonEmpty explanation={explanation} />
+  }
 
   const rows = items.map((place) => [
     place.name,
@@ -92,7 +101,7 @@ export function ComparisonTable({ block }: ComparisonTableProps) {
       </thead>
       <tbody>
         {rows.map((row) => (
-          <tr key={row[0]}>
+          <tr key={row[0]} className="transition-colors hover:bg-bg-3/50">
             {row.map((cell, cellIndex) => (
               <td
                 key={cellIndex}
@@ -121,14 +130,34 @@ function ComparisonTableFrame({
 }) {
   return (
     <div className="rounded-xl border border-border bg-bg-2 p-3">
-      <table aria-label={title} className="w-full border-collapse text-sm">
-        {children}
-      </table>
+      <div className="overflow-x-auto">
+        <table aria-label={title} className="w-full border-collapse text-sm">
+          {children}
+        </table>
+      </div>
       {explanation ? (
         <p className="mt-2 rounded-md bg-bg-3/60 px-2 py-1 text-xs text-text-secondary">
           {explanation}
         </p>
       ) : null}
+    </div>
+  )
+}
+
+function ComparisonEmpty({ explanation }: { explanation: string }) {
+  return (
+    <div
+      role="status"
+      aria-label="No comparison data"
+      className="rounded-xl border border-dashed border-border-strong bg-bg-1 px-4 py-5 text-center"
+    >
+      <p className="text-sm font-medium text-text-primary">
+        {explanation || "We couldn't line up a comparison for that."}
+      </p>
+      <p className="mx-auto mt-1.5 max-w-sm text-xs leading-relaxed text-text-secondary">
+        Try a nearby area, a different category, or a higher budget — those often unlock better
+        options.
+      </p>
     </div>
   )
 }

@@ -17,7 +17,7 @@ export function ChatPage() {
   const navigate = useNavigate()
   const { messages, status } = useConversation(paramId ?? null)
   const { send, isSending } = useSendMessage()
-  const { thinkingStage } = useChat()
+  const { thinkingStage, startNewChat } = useChat()
   const [draft, setDraft] = useState('')
 
   const handleSend = (text: string) => {
@@ -25,6 +25,16 @@ export function ChatPage() {
     if (id && id !== paramId) {
       navigate(`/chat/${id}`)
     }
+  }
+
+  const handleRetry = () => {
+    const lastUserText = [...messages].reverse().find((message) => message.role === 'user')?.content
+    if (lastUserText) handleSend(lastUserText)
+  }
+
+  const handleStartNewChat = () => {
+    startNewChat()
+    navigate('/chat')
   }
 
   const handlePickPrompt = (prompt: string) => {
@@ -42,6 +52,9 @@ export function ChatPage() {
         onSend={handleSend}
         onPickPrompt={handlePickPrompt}
         onPickFollowUp={handlePickPrompt}
+        error={status === 'error'}
+        onRetry={handleRetry}
+        onStartNewChat={handleStartNewChat}
       />
     </div>
   )

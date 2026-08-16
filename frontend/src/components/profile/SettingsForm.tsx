@@ -50,8 +50,8 @@ export function SettingsForm({ saveProfile }: SettingsFormProps) {
       await deleteAccountApi()
       resetSession()
       navigate('/')
-    } catch (err) {
-      setDeleteAccountError(err instanceof Error ? err.message : 'Could not delete your account.')
+    } catch {
+      setDeleteAccountError("Something went wrong — we couldn't delete your account. Please try again.")
       setDeletingAccount(false)
     }
   }
@@ -137,7 +137,7 @@ export function SettingsForm({ saveProfile }: SettingsFormProps) {
 
         {deleteError ? (
           <p className="mt-3 rounded-md bg-error/10 px-3 py-2 text-sm text-error" role="alert">
-            {deleteError}
+            Couldn't delete that conversation. Please try again.
           </p>
         ) : null}
 

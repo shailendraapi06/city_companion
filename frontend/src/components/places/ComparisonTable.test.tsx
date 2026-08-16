@@ -77,8 +77,37 @@ describe('ComparisonTable (Phase 7C)', () => {
     expect(screen.getByText('Zostel is the cheaper, closer pick.')).toBeInTheDocument()
   })
 
-  it('renders nothing when an items block has no items and no rows', () => {
-    const { container } = render(<ComparisonTable block={{ type: 'comparison' }} />)
-    expect(container.textContent).toBe('')
+  it('shows a friendly no-results panel instead of a bare header-only table for empty engine rows', () => {
+    render(<ComparisonTable block={{ type: 'comparison', title: 'Nothing to compare', headers: ['Place', 'Price'], rows: [] }} />)
+
+    expect(screen.getByRole('status', { name: 'No comparison data' })).toBeInTheDocument()
+    expect(
+      screen.getByText("We couldn't line up a comparison for that."),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('table')).toBeNull()
+  })
+
+  it('shows a friendly no-results panel when an items block is empty', () => {
+    render(<ComparisonTable block={{ type: 'comparison', summary: 'No matches for that area.' }} />)
+
+    expect(screen.getByRole('status', { name: 'No comparison data' })).toBeInTheDocument()
+    expect(screen.getByText('No matches for that area.')).toBeInTheDocument()
+    expect(
+      screen.getByText(/Try a nearby area, a different category, or a higher budget/),
+    ).toBeInTheDocument()
+  })
+
+  it('wraps the table in a horizontal-scroll container for narrow viewports', () => {
+    const block: Block = {
+      type: 'comparison',
+      title: 'Zostel vs Treebo',
+      headers: ['Place', 'Price/night'],
+      rows: [['Zostel Koramangala', '₹700']],
+    }
+    const { container } = render(<ComparisonTable block={block} />)
+
+    const scrollWrap = container.querySelector('.overflow-x-auto')
+    expect(scrollWrap).not.toBeNull()
+    expect(scrollWrap?.querySelector('table[aria-label="Zostel vs Treebo"]')).not.toBeNull()
   })
 })

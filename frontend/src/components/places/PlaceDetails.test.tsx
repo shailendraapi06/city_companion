@@ -106,6 +106,19 @@ describe('PlaceDetails (Phase 7C — real GET /api/places/{id}/)', () => {
     expect(screen.getByRole('dialog', { name: 'Place details' })).toBeInTheDocument()
   })
 
+  it('refetches the detail when Try Again is clicked after a failure', async () => {
+    mockedGetPlace.mockRejectedValueOnce(new Error('network')).mockResolvedValueOnce(detail)
+    renderDetails()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open details' }))
+    await screen.findByText(/We couldn't load these details right now\./)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Try Again' }))
+    expect(await screen.findByText('Zostel Koramangala')).toBeInTheDocument()
+    expect(mockedGetPlace).toHaveBeenCalledTimes(2)
+    expect(screen.queryByText(/We couldn't load these details right now\./)).toBeNull()
+  })
+
   it('uses a bottom sheet on mobile and a right drawer on desktop', async () => {
     mockedGetPlace.mockResolvedValue(detail)
 

@@ -168,6 +168,18 @@ describe('PlaceCard (Phase 7C — generic, category-aware)', () => {
     expect(screen.getByText('Zostel Koramangala')).toBeInTheDocument()
   })
 
+  it('has a hover affordance on the card body and wraps facts on narrow viewports', () => {
+    const { container } = render(<PlaceCard place={richPlace} />)
+
+    const article = container.querySelector('article')
+    expect(article?.className).toContain('transition-colors')
+    expect(article?.className).toContain('hover:border-accent-1/30')
+
+    const facts = container.querySelectorAll('p')
+    const wrapped = Array.from(facts).some((paragraph) => paragraph.className.includes('flex-wrap'))
+    expect(wrapped).toBe(true)
+  })
+
   it('renders nothing when no place can be resolved', () => {
     const { container } = render(<PlaceCard block={{ type: 'place' }} />)
     expect(container.textContent).toBe('')

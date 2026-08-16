@@ -11,6 +11,12 @@ import { PlaceCard } from './PlaceCard'
  * plus the full PlaceCard (facts · trust signals · why-this · actions).
  *
  * Long result sets collapse to the top 5 with a "Show more" toggle (§5.6).
+ *
+ * No-results (UI_UX_Brief.md §7 / Frontend_Architecture.md §9): an empty
+ * recommendation block never vanishes silently nor shows a bare "No results
+ * found" — it renders a friendly panel with the engine's own explanation when
+ * present plus an actionable next step (try a nearby area / different
+ * category / higher budget).
  */
 export const RECOMMENDATION_VISIBLE_LIMIT = 5
 
@@ -21,7 +27,10 @@ interface RecommendationCardProps {
 export function RecommendationCard({ block }: RecommendationCardProps) {
   const [expanded, setExpanded] = useState(false)
   const items = normalizeRecommendationItems(block.items as unknown[] | undefined)
-  if (items.length === 0) return null
+
+  if (items.length === 0) {
+    return <RecommendationEmpty explanation={asString(block.explanation) || asString(block.summary)} />
+  }
 
   const summary = asString(block.summary)
   const visible = expanded ? items : items.slice(0, RECOMMENDATION_VISIBLE_LIMIT)
@@ -66,6 +75,24 @@ export function RecommendationCard({ block }: RecommendationCardProps) {
           {expanded ? 'Show less' : `Show more (${items.length - RECOMMENDATION_VISIBLE_LIMIT} more)`}
         </button>
       ) : null}
+    </section>
+  )
+}
+
+function RecommendationEmpty({ explanation }: { explanation: string }) {
+  return (
+    <section
+      role="status"
+      aria-label="No exact matches"
+      className="rounded-xl border border-dashed border-border-strong bg-bg-1 px-4 py-5 text-center"
+    >
+      <p className="text-sm font-medium text-text-primary">
+        {explanation || "We couldn't find exact matches for that."}
+      </p>
+      <p className="mx-auto mt-1.5 max-w-sm text-xs leading-relaxed text-text-secondary">
+        Try a nearby area, a different category, or a higher budget — those often unlock better
+        options.
+      </p>
     </section>
   )
 }

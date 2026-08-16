@@ -88,4 +88,27 @@ describe('MessageActions (Phase 7D — §6.4)', () => {
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith('copy this')
     expect(await screen.findByText('Copied')).toBeInTheDocument()
   })
+
+  it('shows a friendly error (no technical detail) and re-enables the button when feedback fails', async () => {
+    mockedSubmitFeedback.mockRejectedValue(new Error('500: upstream timeout'))
+    render(<MessageActions messageId="m-1" content="hello" />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Helpful' }))
+
+    expect(await screen.findByText("Couldn't send feedback. Try again.")).toBeInTheDocument()
+    expect(screen.queryByText(/500: upstream timeout/)).toBeNull()
+    expect(screen.getByRole('button', { name: 'Helpful' })).toBeEnabled()
+    expect(screen.queryByText('Thanks for the feedback')).toBeNull()
+  })
+
+  it('keeps the action row visible on touch (no lg hover) and only hides it behind the lg hover-reveal', () => {
+    const { container } = render(<MessageActions messageId="m-1" content="hello" />)
+
+    const row = container.querySelector('[class*="mt-1.5 pl-1"]')
+    expect(row?.className).toContain('lg:opacity-0')
+    expect(row?.className).toContain('lg:group-hover:opacity-100')
+    expect(screen.getByRole('button', { name: 'Helpful' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Not helpful' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Copy' })).toBeInTheDocument()
+  })
 })

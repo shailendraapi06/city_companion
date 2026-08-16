@@ -103,9 +103,28 @@ describe('RecommendationCard (Phase 7C — ranked list)', () => {
     expect(screen.queryByRole('button', { name: /Show more/ })).toBeNull()
   })
 
-  it('renders nothing when there are no items', () => {
-    const { container } = render(<RecommendationCard block={{ type: 'recommendation' }} />)
-    expect(container.textContent).toBe('')
+  it('shows a friendly no-results panel with an actionable suggestion when there are no items', () => {
+    render(<RecommendationCard block={{ type: 'recommendation' }} />)
+
+    expect(screen.getByRole('status', { name: 'No exact matches' })).toBeInTheDocument()
+    expect(
+      screen.getByText("We couldn't find exact matches for that."),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/Try a nearby area, a different category, or a higher budget/),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('No results found')).toBeNull()
+  })
+
+  it('shows the engine explanation when the no-results payload provides one', () => {
+    render(
+      <RecommendationCard
+        block={{ type: 'recommendation', explanation: 'No stays under ₹500 in Indiranagar.' }}
+      />,
+    )
+
+    expect(screen.getByRole('status', { name: 'No exact matches' })).toBeInTheDocument()
+    expect(screen.getByText('No stays under ₹500 in Indiranagar.')).toBeInTheDocument()
   })
 
   it('shows the summary and places inside the section', () => {

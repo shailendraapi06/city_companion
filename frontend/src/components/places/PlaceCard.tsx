@@ -64,7 +64,7 @@ export function PlaceCard({ block, place, initialSaved = false, className }: Pla
 
   return (
     <article
-      className={`rounded-xl border border-border bg-bg-2 p-4 ${className ?? ''}`}
+      className={`rounded-xl border border-border bg-bg-2 p-4 transition-colors hover:border-accent-1/30 ${className ?? ''}`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">

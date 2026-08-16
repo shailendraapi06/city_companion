@@ -28,6 +28,7 @@ export function MessageActions({ messageId, content, placeId }: MessageActionsPr
   const [copied, setCopied] = useState(false)
   const [submitted, setSubmitted] = useState<FeedbackType | null>(null)
   const [reasonOpen, setReasonOpen] = useState(false)
+  const [submitError, setSubmitError] = useState(false)
 
   const handleCopy = async () => {
     try {
@@ -44,10 +45,14 @@ export function MessageActions({ messageId, content, placeId }: MessageActionsPr
   const handleFeedback = async (type: FeedbackType, reason: FeedbackReason | null = null) => {
     if (submitted) return
     setSubmitted(type)
+    setSubmitError(false)
     try {
       await submitFeedback({ message_id: messageId, place_id: placeId ?? null, type, reason })
     } catch {
+      // Never surface the technical reason — the message just stays actionable.
       setSubmitted(null)
+      setReasonOpen(false)
+      setSubmitError(true)
     }
   }
 
@@ -95,6 +100,11 @@ export function MessageActions({ messageId, content, placeId }: MessageActionsPr
         {submitted !== null ? (
           <span role="status" className="ml-1 text-xs text-text-tertiary">
             Thanks for the feedback
+          </span>
+        ) : null}
+        {submitError ? (
+          <span role="status" className="ml-1 text-xs text-text-tertiary">
+            Couldn't send feedback. Try again.
           </span>
         ) : null}
       </div>

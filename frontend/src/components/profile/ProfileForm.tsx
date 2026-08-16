@@ -91,7 +91,7 @@ export function ProfileForm({ user, saveProfile }: ProfileFormProps) {
 
       {saveProfile.isError ? (
         <p className="rounded-md bg-error/10 px-3 py-2 text-sm text-error" role="alert">
-          Couldn't save your profile. {saveProfile.error instanceof Error ? saveProfile.error.message : ''}
+          Something went wrong — your profile wasn't saved. Please try again.
         </p>
       ) : null}
 

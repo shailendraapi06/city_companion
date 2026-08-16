@@ -110,7 +110,11 @@ export function LocationIndicator({ className }: LocationIndicatorProps) {
               autoComplete="off"
               className="w-full rounded-lg border border-border bg-bg-1 px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-tertiary focus:border-accent-1/60"
             />
-            <button type="submit" className="btn-primary mt-2 w-full">
+            <button
+              type="submit"
+              disabled={!draft.trim()}
+              className="btn-primary mt-2 w-full disabled:cursor-not-allowed disabled:opacity-50"
+            >
               Apply manual location
             </button>
           </form>

@@ -67,6 +67,20 @@ describe('LocationIndicator (Phase 7E — editable location, §8 / §9)', () => 
     expect(screen.getByRole('button', { name: /Using current location/ })).toBeInTheDocument()
   })
 
+  it('disables Apply until a non-blank manual location is typed', () => {
+    renderIndicator(true)
+    fireEvent.click(screen.getByRole('button', { name: /Using current location/ }))
+
+    const apply = screen.getByRole('button', { name: 'Apply manual location' })
+    expect(apply).toBeDisabled()
+
+    fireEvent.change(screen.getByLabelText('City or area'), { target: { value: '   ' } })
+    expect(apply).toBeDisabled()
+
+    fireEvent.change(screen.getByLabelText('City or area'), { target: { value: 'Lucknow' } })
+    expect(apply).toBeEnabled()
+  })
+
   it('requests the device location from the dropdown', async () => {
     renderIndicator(false)
     fireEvent.click(screen.getByRole('button', { name: /Set location/ }))
@@ -75,6 +89,18 @@ describe('LocationIndicator (Phase 7E — editable location, §8 / §9)', () => 
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /Using current location/ })).toBeInTheDocument(),
     )
+  })
+
+  it('fits a narrow mobile header: truncates the pill and caps the dropdown width', () => {
+    renderIndicator(true)
+    const pill = screen.getByRole('button', { name: /Using current location/ })
+    expect(pill.className).toContain('max-w-56')
+    expect(pill.querySelector('.truncate')).not.toBeNull()
+
+    fireEvent.click(pill)
+    const dropdown = screen.getByRole('dialog', { name: 'Change location' })
+    expect(dropdown.className).toContain('w-72')
+    expect(pill.className).toContain('min-w-0')
   })
 
   it('closes the dropdown on Escape', () => {
