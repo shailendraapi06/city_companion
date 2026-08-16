@@ -47,19 +47,19 @@ export function LoginForm() {
   return (
     <form onSubmit={handleSubmit} className="w-full space-y-4">
       {submitError && (
-        <div className="rounded-xl bg-rose-500/10 border border-rose-500/20 p-3.5 text-sm text-rose-400" role="alert">
+        <div className="rounded-xl border border-error/30 bg-error/10 p-3.5 text-sm text-error" role="alert">
           {submitError}
         </div>
       )}
 
       {fieldError && (
-        <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-3.5 text-sm text-amber-400" role="alert">
+        <div className="rounded-xl border border-warning/30 bg-warning/10 p-3.5 text-sm text-warning" role="alert">
           {fieldError}
         </div>
       )}
 
       <div>
-        <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5" htmlFor="email">
+        <label className="field-label" htmlFor="email">
           Email Address
         </label>
         <input
@@ -69,12 +69,12 @@ export function LoginForm() {
           onChange={(e) => setEmail(e.target.value)}
           placeholder="you@example.com"
           disabled={isLoading}
-          className="w-full rounded-xl bg-slate-900 border border-slate-800 px-4 py-3 text-slate-100 placeholder-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-colors"
+          className="field-input"
         />
       </div>
 
       <div>
-        <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5" htmlFor="password">
+        <label className="field-label" htmlFor="password">
           Password
         </label>
         <input
@@ -84,21 +84,21 @@ export function LoginForm() {
           onChange={(e) => setPassword(e.target.value)}
           placeholder="••••••••"
           disabled={isLoading}
-          className="w-full rounded-xl bg-slate-900 border border-slate-800 px-4 py-3 text-slate-100 placeholder-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-colors"
+          className="field-input"
         />
       </div>
 
       <button
         type="submit"
         disabled={isLoading}
-        className="w-full rounded-xl bg-indigo-600 px-4 py-3.5 text-sm font-semibold text-white hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-slate-950 disabled:opacity-50 transition-all cursor-pointer"
+        className="btn-primary w-full"
       >
         {isLoading ? 'Signing in...' : 'Sign In'}
       </button>
 
-      <p className="text-center text-sm text-slate-400 pt-2">
+      <p className="pt-2 text-center text-sm text-text-secondary">
         Don't have an account?{' '}
-        <Link to="/signup" className="text-indigo-400 hover:text-indigo-300 font-medium">
+        <Link to="/signup" className="font-medium text-accent-1 hover:text-accent-1/80">
           Create one now
         </Link>
       </p>

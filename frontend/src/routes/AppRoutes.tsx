@@ -1,4 +1,6 @@
-import { Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes } from 'react-router-dom'
+import { PublicLayout } from '../components/layout/PublicLayout'
+import { AppLayout } from '../components/layout/AppLayout'
 import { ChatPage } from '../pages/Chat/ChatPage'
 import { LandingPage } from '../pages/Landing/LandingPage'
 import { LoginPage } from '../pages/Login/LoginPage'
@@ -10,55 +12,40 @@ import { ProtectedRoute } from './ProtectedRoute'
 export function AppRoutes() {
   return (
     <Routes>
-      <Route path="/" element={<LandingPage />} />
+      <Route element={<PublicLayout />}>
+        <Route path="/" element={<LandingPage />} />
+        <Route
+          path="/login"
+          element={
+            <ProtectedRoute requireGuest>
+              <LoginPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/signup"
+          element={
+            <ProtectedRoute requireGuest>
+              <SignupPage />
+            </ProtectedRoute>
+          }
+        />
+      </Route>
+
       <Route
-        path="/login"
-        element={
-          <ProtectedRoute requireGuest>
-            <LoginPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/signup"
-        element={
-          <ProtectedRoute requireGuest>
-            <SignupPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/chat"
-        element={
-          <ProtectedRoute>
-            <ChatPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/chat/:conversationId"
         element={
           <ProtectedRoute>
-            <ChatPage />
+            <AppLayout />
           </ProtectedRoute>
         }
-      />
-      <Route
-        path="/saved"
-        element={
-          <ProtectedRoute>
-            <SavedPlacesPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/profile"
-        element={
-          <ProtectedRoute>
-            <ProfilePage />
-          </ProtectedRoute>
-        }
-      />
+      >
+        <Route path="/chat" element={<ChatPage />} />
+        <Route path="/chat/:conversationId" element={<ChatPage />} />
+        <Route path="/saved" element={<SavedPlacesPage />} />
+        <Route path="/profile" element={<ProfilePage />} />
+      </Route>
+
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
 }

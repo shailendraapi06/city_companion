@@ -5,35 +5,24 @@ export function LandingPage() {
   const { isAuthenticated } = useAuth()
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-slate-950 px-4 text-center text-slate-100">
-      <div className="max-w-xl space-y-6">
-        <h1 className="text-4xl font-extrabold tracking-tight text-white sm:text-5xl">
-          City Companion
+    <div className="flex flex-1 flex-col items-center justify-center px-4 py-16 text-center">
+      <div className="anim-fade-up max-w-xl space-y-6">
+        <h1 className="text-4xl font-extrabold tracking-tight text-text-primary sm:text-5xl">
+          <span className="text-gradient">City Companion</span>
         </h1>
-        <p className="text-lg text-slate-400">
-          Every new city deserves a familiar friend.
-        </p>
+        <p className="text-lg text-text-secondary">Every new city deserves a familiar friend.</p>
 
         <div className="flex items-center justify-center gap-4 pt-4">
           {isAuthenticated ? (
-            <Link
-              to="/chat"
-              className="rounded-xl bg-indigo-600 px-6 py-3.5 text-sm font-semibold text-white hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/25"
-            >
-              Go to Chat Engine
+            <Link to="/chat" className="btn-primary">
+              Go to Chat
             </Link>
           ) : (
             <>
-              <Link
-                to="/login"
-                className="rounded-xl bg-indigo-600 px-6 py-3.5 text-sm font-semibold text-white hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/25"
-              >
+              <Link to="/login" className="btn-primary">
                 Sign In
               </Link>
-              <Link
-                to="/signup"
-                className="rounded-xl border border-slate-800 bg-slate-900 px-6 py-3.5 text-sm font-semibold text-slate-300 hover:bg-slate-800 hover:text-white transition-all"
-              >
+              <Link to="/signup" className="btn-secondary">
                 Create Account
               </Link>
             </>
