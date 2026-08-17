@@ -1,10 +1,15 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { ChatResponse } from '../lib/api/chat'
 import { restoreGeolocation, stubGeolocation } from '../test/geolocation'
 import { ChatProvider, useChat } from './ChatContext'
 
 vi.mock('../lib/api/chat', () => ({
   sendMessage: vi.fn(),
+}))
+
+vi.mock('../lib/api/conversations', () => ({
+  getConversationMessages: vi.fn(),
 }))
 
 function Harness() {
@@ -15,10 +20,12 @@ function Harness() {
       <span data-testid="status">{ctx.status}</span>
       <span data-testid="stage">{ctx.thinkingStage ?? 'null'}</span>
       <span data-testid="count">{ctx.messages.length}</span>
+      <span data-testid="loading">{String(ctx.loadingConversation)}</span>
+      <span data-testid="notFound">{String(ctx.conversationNotFound)}</span>
       <span data-testid="loc">{ctx.location ? `${ctx.location.lat}` : 'none'}</span>
       <span data-testid="override">{ctx.locationOverride ?? 'null'}</span>
-      <button onClick={() => ctx.openConversation('mock-conv-1')}>open mock</button>
-      <button onClick={() => ctx.openConversation('unknown-id')}>open unknown</button>
+      <button onClick={() => ctx.openConversation('real-conv-1')}>open real</button>
+      <button onClick={() => ctx.openConversation('not-found-id')}>open missing</button>
       <button onClick={() => ctx.startNewChat()}>reset</button>
       <button onClick={() => { void ctx.sendMessage('hello') }}>send</button>
       <button
@@ -39,7 +46,7 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('ChatContext (Phase 8A — real POST /api/chat/ transport)', () => {
+describe('ChatContext (Phase 8A+B — real API transport)', () => {
   it('exposes conversationId, messages, status, location and locationOverride', () => {
     render(
       <ChatProvider>
@@ -56,35 +63,83 @@ describe('ChatContext (Phase 8A — real POST /api/chat/ transport)', () => {
     expect(screen.getByTestId('override')).toHaveTextContent('Lucknow')
   })
 
-  it('opens a mock conversation with seeded history and resets via startNewChat', () => {
+  it('loads a real conversation via API and resets via startNewChat', async () => {
+    const { getConversationMessages } = await import('../lib/api/conversations')
+    vi.mocked(getConversationMessages).mockResolvedValueOnce({
+      results: [
+        { id: 'msg-1', role: 'user', content: 'Find a PG', response_data: null, created_at: '2026-01-01T00:00:00Z' },
+        {
+          id: 'msg-2', role: 'assistant', content: 'Here are PGs',
+          response_data: { message: { role: 'assistant' }, content: [{ type: 'text', content: 'PG results' }] },
+          created_at: '2026-01-01T00:00:01Z',
+        },
+      ],
+    })
+
     render(
       <ChatProvider>
         <Harness />
       </ChatProvider>,
     )
-    fireEvent.click(screen.getByText('open mock'))
-    expect(screen.getByTestId('conv')).toHaveTextContent('mock-conv-1')
-    expect(screen.getByTestId('count')).toHaveTextContent('2')
+
+    expect(screen.getByTestId('loading')).toHaveTextContent('false')
+
+    fireEvent.click(screen.getByText('open real'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('loading')).toHaveTextContent('false')
+      expect(screen.getByTestId('count')).toHaveTextContent('2')
+      expect(screen.getByTestId('conv')).toHaveTextContent('real-conv-1')
+    })
+
     fireEvent.click(screen.getByText('reset'))
     expect(screen.getByTestId('conv')).toHaveTextContent('null')
     expect(screen.getByTestId('count')).toHaveTextContent('0')
   })
 
-  it('keeps an unknown conversation id without seeding or clearing messages', () => {
+  it('sets conversationNotFound when the API returns 404', async () => {
+    const { getConversationMessages } = await import('../lib/api/conversations')
+    vi.mocked(getConversationMessages).mockRejectedValueOnce(
+      Object.assign(new Error('Not found'), { code: 'NOT_FOUND', status: 404 }),
+    )
+
     render(
       <ChatProvider>
         <Harness />
       </ChatProvider>,
     )
-    fireEvent.click(screen.getByText('open unknown'))
-    expect(screen.getByTestId('conv')).toHaveTextContent('unknown-id')
-    expect(screen.getByTestId('count')).toHaveTextContent('0')
+
+    fireEvent.click(screen.getByText('open missing'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('notFound')).toHaveTextContent('true')
+      expect(screen.getByTestId('loading')).toHaveTextContent('false')
+    })
+  })
+
+  it('sets conversationNotFound on network errors', async () => {
+    const { getConversationMessages } = await import('../lib/api/conversations')
+    vi.mocked(getConversationMessages).mockRejectedValueOnce(
+      Object.assign(new Error('Network error'), { code: 'NETWORK_ERROR', status: 0 }),
+    )
+
+    render(
+      <ChatProvider>
+        <Harness />
+      </ChatProvider>,
+    )
+
+    fireEvent.click(screen.getByText('open missing'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('notFound')).toHaveTextContent('true')
+    })
   })
 
   it('sends via the real API, appends both messages, and adopts the conversation_id', async () => {
     const mockSend = vi.mocked((await import('../lib/api/chat')).sendMessage)
 
-    let resolveApi!: (value: unknown) => void
+    let resolveApi!: (value: ChatResponse) => void
     mockSend.mockReturnValueOnce(new Promise((resolve) => { resolveApi = resolve }))
 
     render(

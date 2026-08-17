@@ -7,6 +7,7 @@ import { MessageList } from './MessageList'
 interface ChatWindowProps {
   messages: Message[]
   isSending: boolean
+  isLoading?: boolean
   thinkingStage?: ThinkingStage | null
   draft: string
   onDraftChange: (text: string) => void
@@ -27,10 +28,14 @@ interface ChatWindowProps {
  * stays docked below so quick-prompt and follow-up chips can pre-fill or auto-send.
  * A transport error surfaces the generic ChatErrorBanner instead of an empty or
  * stale view, with Try Again / Start New Chat per §7.
+ *
+ * Phase 8B: shows a loading skeleton while the conversation history is being
+ * fetched from GET /api/conversations/{id}/messages/.
  */
 export function ChatWindow({
   messages,
   isSending,
+  isLoading = false,
   thinkingStage,
   draft,
   onDraftChange,
@@ -50,11 +55,16 @@ export function ChatWindow({
         </div>
       ) : null}
 
-      {messages.length === 0 && !error ? (
+      {isLoading ? (
+        <div className="flex flex-1 items-center justify-center">
+          <div className="flex flex-col items-center gap-3 text-text-tertiary">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-border-strong border-t-accent-1" />
+            <p className="text-sm">Loading conversation…</p>
+          </div>
+        </div>
+      ) : messages.length === 0 && !error ? (
         <ChatEmptyState onPickPrompt={onAutoSend ?? onPickPrompt} />
-      ) : null}
-
-      {messages.length > 0 ? (
+      ) : messages.length > 0 ? (
         <MessageList
           messages={messages}
           isTyping={isSending}
@@ -63,7 +73,9 @@ export function ChatWindow({
         />
       ) : null}
 
-      <Composer draft={draft} onDraftChange={onDraftChange} onSend={onSend} disabled={isSending} />
+      {!isLoading ? (
+        <Composer draft={draft} onDraftChange={onDraftChange} onSend={onSend} disabled={isSending} />
+      ) : null}
     </div>
   )
 }

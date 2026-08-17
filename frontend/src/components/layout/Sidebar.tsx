@@ -1,5 +1,5 @@
 import { Link, NavLink } from 'react-router-dom'
-import { mockConversations } from '../../data/mockChat'
+import { useConversationsList } from '../../hooks/useConversationsList'
 import type { Conversation } from '../../types'
 
 interface SidebarContentProps {
@@ -20,14 +20,17 @@ function groupFor(conversation: Conversation): ConversationGroup {
 /*
  * Sidebar history (UI_UX_Brief.md §4.3): "+ New Chat", conversations grouped
  * Today / Yesterday / Older, then Saved Places + Profile/Settings at the bottom.
- * Phase 6D seeds the list from mock data; Phase 8 swaps `mockConversations`
- * for the real GET /api/conversations/ query without changing the grouping UI.
+ * Phase 8B: reads real GET /api/conversations/ via useConversationsList.
  */
 export function SidebarContent({ onNavigate }: SidebarContentProps) {
+  const { conversations, isLoading } = useConversationsList()
+
   const grouped = GROUP_ORDER.map((group) => ({
     group,
-    items: mockConversations.filter((conversation) => groupFor(conversation) === group),
+    items: conversations.filter((conversation) => groupFor(conversation) === group),
   }))
+
+  const totalCount = conversations.length
 
   return (
     <div className="flex h-full flex-col gap-6 p-4">
@@ -49,7 +52,11 @@ export function SidebarContent({ onNavigate }: SidebarContentProps) {
 
       <section aria-label="Conversations">
         <h2 className="field-label px-1">Conversations</h2>
-        {mockConversations.length === 0 ? (
+        {isLoading ? (
+          <div className="rounded-xl border border-dashed border-border-strong bg-bg-1 p-3.5 text-xs leading-relaxed text-text-tertiary">
+            Loading conversations…
+          </div>
+        ) : totalCount === 0 ? (
           <div className="rounded-xl border border-dashed border-border-strong bg-bg-1 p-3.5 text-xs leading-relaxed text-text-tertiary">
             No conversations yet.
             <br />
@@ -74,7 +81,7 @@ export function SidebarContent({ onNavigate }: SidebarContentProps) {
                           }
                         >
                           <span className="min-w-0">
-                            <span className="block truncate text-sm">{conversation.title}</span>
+                            <span className="block truncate text-sm">{conversation.title ?? 'New conversation'}</span>
                           </span>
                         </NavLink>
                       </li>

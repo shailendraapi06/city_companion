@@ -1,21 +1,18 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from 'react'
 import type { ReactNode } from 'react'
-import { mockMessagesByConversation } from '../data/mockChat'
 import { sendMessage as chatApiSendMessage } from '../lib/api/chat'
+import { getConversationMessages } from '../lib/api/conversations'
 import type { ApiError } from '../lib/api/client'
 import type { ChatLocation, ChatStatus, Message, ThinkingStage } from '../types'
 
 /*
  * Chat/session state per Frontend_Architecture.md §5.2.
  *
- * Phase 8A: `sendMessage` calls the real POST /api/chat/ endpoint. On success
- * the backend-returned conversation_id is adopted (implicit creation when the
- * prior id was null) and the assistant message is appended through the same
- * ResponseRenderer pipeline already proved against mock payloads.
- *
- * `openConversation` still seeds from mockChat.ts (Phase 8B wires real
- * conversation loading). The mock send infrastructure (timers, fake stages,
- * buildMockReply) has been removed — only the real transport remains.
+ * Phase 8A: `sendMessage` calls the real POST /api/chat/ endpoint.
+ * Phase 8B: `openConversation` fetches real message history via
+ * GET /api/conversations/{id}/messages/ and hydrates the message list.
+ * Stored `response_data` on each assistant message renders through the
+ * same ResponseRenderer pipeline used for live responses (§11.4).
  */
 
 interface ChatState {
@@ -27,12 +24,17 @@ interface ChatState {
   locationOverride: string | null
   locationError: string | null
   locationSupported: boolean
+  loadingConversation: boolean
+  conversationNotFound: boolean
 }
 
 type ChatAction =
   | { type: 'SELECT_CONVERSATION'; conversationId: string; messages: Message[] }
   | { type: 'SET_CONVERSATION_ID'; conversationId: string }
   | { type: 'RESET' }
+  | { type: 'LOAD_CONVERSATION_START'; conversationId: string }
+  | { type: 'LOAD_CONVERSATION'; conversationId: string; messages: Message[] }
+  | { type: 'CONVERSATION_NOT_FOUND' }
   | { type: 'APPEND_USER_MESSAGE'; message: Message }
   | { type: 'APPEND_ASSISTANT_MESSAGE'; message: Message }
   | { type: 'SET_STATUS'; status: ChatStatus }
@@ -49,7 +51,13 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'SET_CONVERSATION_ID':
       return { ...state, conversationId: action.conversationId }
     case 'RESET':
-      return { ...state, conversationId: null, messages: [], status: 'idle', thinkingStage: null }
+      return { ...state, conversationId: null, messages: [], status: 'idle', thinkingStage: null, loadingConversation: false, conversationNotFound: false }
+    case 'LOAD_CONVERSATION_START':
+      return { ...state, conversationId: action.conversationId, messages: [], status: 'idle', thinkingStage: null, loadingConversation: true, conversationNotFound: false }
+    case 'LOAD_CONVERSATION':
+      return { ...state, conversationId: action.conversationId, messages: action.messages, status: 'idle', thinkingStage: null, loadingConversation: false }
+    case 'CONVERSATION_NOT_FOUND':
+      return { ...state, loadingConversation: false, conversationNotFound: true }
     case 'APPEND_USER_MESSAGE':
       return { ...state, messages: [...state.messages, action.message] }
     case 'APPEND_ASSISTANT_MESSAGE':
@@ -80,6 +88,8 @@ const INITIAL_STATE: ChatState = {
   locationOverride: null,
   locationError: null,
   locationSupported: false,
+  loadingConversation: false,
+  conversationNotFound: false,
 }
 
 interface ChatContextType extends ChatState {
@@ -96,6 +106,7 @@ const ChatContext = createContext<ChatContextType | undefined>(undefined)
 export function ChatProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(chatReducer, INITIAL_STATE)
   const inFlightRef = useRef<AbortController | null>(null)
+  const loadIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     return () => {
@@ -103,17 +114,53 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  /*
+   * Phase 8B — real conversation loading (Frontend_Architecture.md §11.4).
+   *
+   * Fetches GET /api/conversations/{id}/messages/ to hydrate the message list.
+   * A `loadIdRef` tracks the most recently requested conversation so stale
+   * responses from an earlier navigation don't overwrite a newer one.
+   *
+   * Errors:
+   *   - 404 / 403 → CONVERSATION_NOT_FOUND (graceful redirect in ChatPage)
+   *   - Network / 5xx → CONVERSATION_NOT_FOUND (same graceful treatment)
+   */
   const openConversation = useCallback((id: string) => {
-    if (mockMessagesByConversation[id]) {
-      dispatch({ type: 'SELECT_CONVERSATION', conversationId: id, messages: mockMessagesByConversation[id] })
-    } else {
-      dispatch({ type: 'SET_CONVERSATION_ID', conversationId: id })
-    }
+    loadIdRef.current = id
+    dispatch({ type: 'LOAD_CONVERSATION_START', conversationId: id })
+
+    void (async () => {
+      try {
+        const data = await getConversationMessages(id)
+
+        if (loadIdRef.current !== id) return
+
+        const messages: Message[] = (data.results ?? []).map((msg) => ({
+          id: msg.id,
+          role: msg.role,
+          content: msg.content,
+          response_data: msg.response_data ?? null,
+          created_at: msg.created_at,
+        }))
+
+        dispatch({ type: 'LOAD_CONVERSATION', conversationId: id, messages })
+      } catch (err) {
+        if (loadIdRef.current !== id) return
+
+        const apiErr = err as ApiError
+        if (apiErr.status === 404 || apiErr.status === 403) {
+          dispatch({ type: 'CONVERSATION_NOT_FOUND' })
+        } else {
+          dispatch({ type: 'CONVERSATION_NOT_FOUND' })
+        }
+      }
+    })()
   }, [])
 
   const startNewChat = useCallback(() => {
     inFlightRef.current?.abort()
     inFlightRef.current = null
+    loadIdRef.current = null
     dispatch({ type: 'RESET' })
   }, [])
 
