@@ -3,6 +3,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { restoreGeolocation, stubGeolocation } from '../test/geolocation'
 import { ChatProvider, useChat } from './ChatContext'
 
+vi.mock('../lib/api/chat', () => ({
+  sendMessage: vi.fn(),
+}))
+
 function Harness() {
   const ctx = useChat()
   return (
@@ -16,7 +20,7 @@ function Harness() {
       <button onClick={() => ctx.openConversation('mock-conv-1')}>open mock</button>
       <button onClick={() => ctx.openConversation('unknown-id')}>open unknown</button>
       <button onClick={() => ctx.startNewChat()}>reset</button>
-      <button onClick={() => ctx.sendMessage('hello')}>send</button>
+      <button onClick={() => { void ctx.sendMessage('hello') }}>send</button>
       <button
         onClick={() => {
           ctx.setLocation({ lat: 26.4, lng: 80.3 })
@@ -32,10 +36,10 @@ function Harness() {
 afterEach(() => {
   cleanup()
   restoreGeolocation()
-  vi.useRealTimers()
+  vi.restoreAllMocks()
 })
 
-describe('ChatContext (Phase 6D — §5.2 documented state shape)', () => {
+describe('ChatContext (Phase 8A — real POST /api/chat/ transport)', () => {
   it('exposes conversationId, messages, status, location and locationOverride', () => {
     render(
       <ChatProvider>
@@ -77,41 +81,77 @@ describe('ChatContext (Phase 6D — §5.2 documented state shape)', () => {
     expect(screen.getByTestId('count')).toHaveTextContent('0')
   })
 
-  it('appends the user message in sending state, then simulates an assistant reply', async () => {
-    vi.useFakeTimers()
+  it('sends via the real API, appends both messages, and adopts the conversation_id', async () => {
+    const mockSend = vi.mocked((await import('../lib/api/chat')).sendMessage)
+
+    let resolveApi!: (value: unknown) => void
+    mockSend.mockReturnValueOnce(new Promise((resolve) => { resolveApi = resolve }))
+
     render(
       <ChatProvider>
         <Harness />
       </ChatProvider>,
     )
+
     fireEvent.click(screen.getByText('send'))
-    expect(screen.getByTestId('status')).toHaveTextContent('sending')
+
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('sending'))
     expect(screen.getByTestId('count')).toHaveTextContent('1')
-    await act(async () => {
-      vi.advanceTimersByTime(600)
+
+    act(() => {
+      resolveApi({
+        conversation_id: 'real-conv-123',
+        message: { id: 'asst-msg-1', role: 'assistant' },
+        content: [{ type: 'text', content: 'Hello from the API' }],
+      })
     })
-    expect(screen.getByTestId('status')).toHaveTextContent('idle')
-    expect(screen.getByTestId('count')).toHaveTextContent('2')
+
+    await waitFor(() => {
+      expect(screen.getByTestId('status')).toHaveTextContent('idle')
+      expect(screen.getByTestId('count')).toHaveTextContent('2')
+      expect(screen.getByTestId('conv')).toHaveTextContent('real-conv-123')
+    })
+
+    expect(mockSend).toHaveBeenCalledWith({
+      conversation_id: null,
+      message: 'hello',
+      location: null,
+    })
   })
 
-  it('steps through the §6.1 thinking stages during a mock reply, then clears them', async () => {
-    vi.useFakeTimers()
+  it('sets thinkingStage to understanding during the real request and clears it on success', async () => {
+    const mockSend = vi.mocked((await import('../lib/api/chat')).sendMessage)
+    mockSend.mockReturnValueOnce(new Promise(() => {}))
+
     render(
       <ChatProvider>
         <Harness />
       </ChatProvider>,
     )
+
     fireEvent.click(screen.getByText('send'))
-    expect(screen.getByTestId('stage')).toHaveTextContent('understanding')
-    await act(async () => {
-      vi.advanceTimersByTime(250)
+
+    await waitFor(() => expect(screen.getByTestId('stage')).toHaveTextContent('understanding'))
+    expect(screen.getByTestId('status')).toHaveTextContent('sending')
+  })
+
+  it('transitions to error status when the API call fails', async () => {
+    const mockSend = vi.mocked((await import('../lib/api/chat')).sendMessage)
+    mockSend.mockRejectedValueOnce(Object.assign(new Error('Network error'), { code: 'NETWORK_ERROR', status: 0 }))
+
+    render(
+      <ChatProvider>
+        <Harness />
+      </ChatProvider>,
+    )
+
+    fireEvent.click(screen.getByText('send'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('status')).toHaveTextContent('error')
+      expect(screen.getByTestId('stage')).toHaveTextContent('null')
+      expect(screen.getByTestId('count')).toHaveTextContent('1')
     })
-    expect(screen.getByTestId('stage')).toHaveTextContent('ranking')
-    await act(async () => {
-      vi.advanceTimersByTime(350)
-    })
-    expect(screen.getByTestId('status')).toHaveTextContent('idle')
-    expect(screen.getByTestId('stage')).toHaveTextContent('null')
   })
 })
 

@@ -13,6 +13,8 @@ interface ChatWindowProps {
   onSend: (text: string) => void
   onPickPrompt: (prompt: string) => void
   onPickFollowUp?: (prompt: string) => void
+  /** Called by chips and quick-prompts to send immediately through the real pipeline. */
+  onAutoSend?: (text: string) => void
   /** True when the transport reported a failure (ChatContext status='error'). */
   error?: boolean
   onRetry?: () => void
@@ -22,8 +24,8 @@ interface ChatWindowProps {
 /*
  * Orchestrates one conversation's message list + composer (Frontend_Architecture.md §4).
  * A conversation with no messages shows the ChatEmptyState; the composer always
- * stays docked below so quick-prompt and follow-up chips can pre-fill it. A
- * transport error surfaces the generic ChatErrorBanner instead of an empty or
+ * stays docked below so quick-prompt and follow-up chips can pre-fill or auto-send.
+ * A transport error surfaces the generic ChatErrorBanner instead of an empty or
  * stale view, with Try Again / Start New Chat per §7.
  */
 export function ChatWindow({
@@ -35,6 +37,7 @@ export function ChatWindow({
   onSend,
   onPickPrompt,
   onPickFollowUp,
+  onAutoSend,
   error = false,
   onRetry,
   onStartNewChat,
@@ -48,7 +51,7 @@ export function ChatWindow({
       ) : null}
 
       {messages.length === 0 && !error ? (
-        <ChatEmptyState onPickPrompt={onPickPrompt} />
+        <ChatEmptyState onPickPrompt={onAutoSend ?? onPickPrompt} />
       ) : null}
 
       {messages.length > 0 ? (
@@ -56,7 +59,7 @@ export function ChatWindow({
           messages={messages}
           isTyping={isSending}
           thinkingStage={thinkingStage}
-          onPickFollowUp={onPickFollowUp}
+          onPickFollowUp={onAutoSend ?? onPickFollowUp}
         />
       ) : null}
 

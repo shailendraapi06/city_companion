@@ -1,11 +1,11 @@
 import { useChat } from '../context/ChatContext'
 
 /*
- * Sends a message for the active conversation. Phase 6D simulates the round
- * trip in ChatContext; Phase 8 swaps the transport for POST /api/chat/ without
- * changing this hook's contract: `send` returns the conversation id to adopt.
+ * Sends a message for the active conversation via POST /api/chat/ (Phase 8A).
+ * `send` returns a promise that resolves to the conversation id to adopt
+ * (the backend's id, whether pre-existing or newly created).
  */
-export function useSendMessage(): { send: (text: string) => string; isSending: boolean } {
+export function useSendMessage(): { send: (text: string) => Promise<string>; isSending: boolean } {
   const { sendMessage, status } = useChat()
   return { send: sendMessage, isSending: status === 'sending' }
 }

@@ -1,42 +1,22 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from 'react'
 import type { ReactNode } from 'react'
 import { mockMessagesByConversation } from '../data/mockChat'
-import { visualHierarchyPayload, markdownFeaturesPayload, everyBlockTypePayload } from '../test/mocks/aiResponses'
-import type { Block, ChatLocation, ChatStatus, Message, ThinkingStage } from '../types'
+import { sendMessage as chatApiSendMessage } from '../lib/api/chat'
+import type { ApiError } from '../lib/api/client'
+import type { ChatLocation, ChatStatus, Message, ThinkingStage } from '../types'
 
 /*
- * Chat/session state per Frontend_Architecture.md §5.2:
- * {
- *   conversationId: string | null,
- *   messages: Message[],   // includes response_data blocks for assistant messages
- *   status: 'idle' | 'sending' | 'streaming' | 'error',   // streaming = V2-ready, unused until V2
- *   thinkingStage: 'understanding' | 'finding' | 'ranking' | 'finalizing' | null,  // §6.1
- *   location: { lat, lng } | null,
- *   locationOverride: string | null,
- *   locationError: string | null,
- *   locationSupported: boolean,
- * }
+ * Chat/session state per Frontend_Architecture.md §5.2.
  *
- * Phase 6D: the shell runs against mock conversation data. `openConversation`
- * seeds from mockChat.ts; `sendMessage` simulates the /api/chat/ round-trip
- * (Phase 8 swaps this for the real POST). The append path — user message in,
- * assistant message with content[] blocks out — is the exact code path the
- * real client will reuse, so only the transport changes in Phase 8.
+ * Phase 8A: `sendMessage` calls the real POST /api/chat/ endpoint. On success
+ * the backend-returned conversation_id is adopted (implicit creation when the
+ * prior id was null) and the assistant message is appended through the same
+ * ResponseRenderer pipeline already proved against mock payloads.
+ *
+ * `openConversation` still seeds from mockChat.ts (Phase 8B wires real
+ * conversation loading). The mock send infrastructure (timers, fake stages,
+ * buildMockReply) has been removed — only the real transport remains.
  */
-
-const MOCK_REPLY_DELAY_MS = 500
-
-/*
- * Mock-only: the mock round-trip steps through the ThinkingIndicator stages
- * (UI_UX_Brief.md §6.1) before replying, so the shell exercises the same stage
- * contract Phase 8 will feed from real streamed events. `thinkingStage` is
- * `null` unless the mock is mid-reply.
- */
-const MOCK_STAGE_STEP_MS = 125
-
-const MOCK_STAGE_SEQUENCE: ThinkingStage[] = ['understanding', 'finding', 'ranking', 'finalizing']
-
-const MOCK_REPLY_BLOCKS: Block[][] = [visualHierarchyPayload, markdownFeaturesPayload, everyBlockTypePayload]
 
 interface ChatState {
   conversationId: string | null
@@ -105,7 +85,7 @@ const INITIAL_STATE: ChatState = {
 interface ChatContextType extends ChatState {
   openConversation: (id: string) => void
   startNewChat: () => void
-  sendMessage: (text: string) => string
+  sendMessage: (text: string) => Promise<string>
   setLocation: (location: ChatLocation | null) => void
   setLocationOverride: (override: string | null) => void
   requestLocation: () => void
@@ -113,25 +93,13 @@ interface ChatContextType extends ChatState {
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined)
 
-function buildMockReply(userText: string, conversationId: string): Message {
-  const blocks = MOCK_REPLY_BLOCKS[conversationId.length % MOCK_REPLY_BLOCKS.length]
-  return {
-    id: `mock-msg-${Date.now()}`,
-    role: 'assistant',
-    content: `Here is what I found for "${userText}".`,
-    response_data: { message: { role: 'assistant' }, content: blocks },
-    created_at: new Date().toISOString(),
-  }
-}
-
 export function ChatProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(chatReducer, INITIAL_STATE)
-  const mockTimersRef = useRef<ReturnType<typeof setTimeout>[]>([])
+  const inFlightRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     return () => {
-      mockTimersRef.current.forEach(clearTimeout)
-      mockTimersRef.current = []
+      inFlightRef.current?.abort()
     }
   }, [])
 
@@ -144,6 +112,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const startNewChat = useCallback(() => {
+    inFlightRef.current?.abort()
+    inFlightRef.current = null
     dispatch({ type: 'RESET' })
   }, [])
 
@@ -159,8 +129,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
    * Geolocation capture (UI_UX_Brief.md §8 / APP_FLOW.md §9 / Frontend_Architecture.md
    * §6.4). The permission prompt is only ever requested once per app-shell mount;
    * denial or lack of support resolves to a non-fatal state so the shell keeps
-   * working without location. The captured lat/lng is held in `location`, ready
-   * to be attached to /api/chat/ calls once Phase 8 wires that endpoint.
+   * working without location. The captured lat/lng is sent with POST /api/chat/.
    */
   const requestLocation = useCallback(() => {
     if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
@@ -186,13 +155,25 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     requestLocation()
   }, [requestLocation])
 
+  /*
+   * Phase 8A — real POST /api/chat/ (Frontend_Architecture.md §11.3).
+   *
+   * 1. Append the user message immediately (optimistic UI).
+   * 2. Transition to 'sending' with a single "understanding" stage driven by the
+   *    real pending request — no fabricated intermediate stages.
+   * 3. On success: adopt the backend's conversation_id (implicit creation) and
+   *    append the assistant message. The ResponseRenderer pipeline in AIMessage
+   *    renders the real content[] blocks.
+   * 4. On error: transition to 'error' so ChatErrorBanner surfaces.
+   * 5. On unmount / new send: abort the in-flight request.
+   */
   const sendMessage = useCallback(
-    (text: string): string => {
+    async (text: string): Promise<string> => {
       const trimmed = text.trim()
       if (!trimmed) return state.conversationId ?? ''
 
       const userMessage: Message = {
-        id: `mock-msg-${Date.now()}`,
+        id: `user-${Date.now()}`,
         role: 'user',
         content: trimmed,
         response_data: null,
@@ -200,29 +181,51 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       }
       dispatch({ type: 'APPEND_USER_MESSAGE', message: userMessage })
       dispatch({ type: 'SET_STATUS', status: 'sending' })
-      dispatch({ type: 'SET_THINKING_STAGE', stage: MOCK_STAGE_SEQUENCE[0] })
+      dispatch({ type: 'SET_THINKING_STAGE', stage: 'understanding' })
 
-      const conversationId = state.conversationId ?? `mock-conv-${Date.now()}`
-      if (!state.conversationId) {
-        dispatch({ type: 'SET_CONVERSATION_ID', conversationId })
+      inFlightRef.current?.abort()
+      const controller = new AbortController()
+      inFlightRef.current = controller
+
+      try {
+        const response = await chatApiSendMessage({
+          conversation_id: state.conversationId,
+          message: trimmed,
+          location: state.location,
+        })
+
+        if (controller.signal.aborted) return state.conversationId ?? ''
+
+        if (!state.conversationId) {
+          dispatch({ type: 'SET_CONVERSATION_ID', conversationId: response.conversation_id })
+        }
+
+        const assistantMessage: Message = {
+          id: response.message.id,
+          role: 'assistant',
+          content: '',
+          response_data: { message: response.message, content: response.content },
+          created_at: new Date().toISOString(),
+        }
+        dispatch({ type: 'APPEND_ASSISTANT_MESSAGE', message: assistantMessage })
+
+        return response.conversation_id
+      } catch (err) {
+        if (controller.signal.aborted) return state.conversationId ?? ''
+
+        const apiErr = err as ApiError
+        dispatch({ type: 'SET_STATUS', status: 'error' })
+        dispatch({ type: 'SET_THINKING_STAGE', stage: null })
+
+        console.error('Chat send failed:', apiErr.code ?? apiErr.message)
+        return state.conversationId ?? ''
+      } finally {
+        if (inFlightRef.current === controller) {
+          inFlightRef.current = null
+        }
       }
-
-      mockTimersRef.current.forEach(clearTimeout)
-      mockTimersRef.current = []
-      MOCK_STAGE_SEQUENCE.slice(1).forEach((stage, index) => {
-        mockTimersRef.current.push(
-          setTimeout(() => dispatch({ type: 'SET_THINKING_STAGE', stage }), MOCK_STAGE_STEP_MS * (index + 1)),
-        )
-      })
-      mockTimersRef.current.push(
-        setTimeout(() => {
-          dispatch({ type: 'APPEND_ASSISTANT_MESSAGE', message: buildMockReply(trimmed, conversationId) })
-        }, MOCK_REPLY_DELAY_MS),
-      )
-
-      return conversationId
     },
-    [state.conversationId]
+    [state.conversationId, state.location]
   )
 
   const value = useMemo<ChatContextType>(
