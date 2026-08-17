@@ -10,9 +10,9 @@ export const THINKING_STAGES: { key: ThinkingStage; label: string }[] = [
 interface ThinkingIndicatorProps {
   /*
    * The current backend stage (UI_UX_Brief.md §6.1). This component NEVER
-   * advances on its own — it reflects the stage it is given. The Phase 6D mock
-   * drives stages via ChatContext; Phase 8 will feed this prop from real
-   * streamed stage events, so no consumer-side progress is ever fabricated.
+   * advances on its own — it reflects the stage it is given. ChatContext
+   * sets the stage from real POST /api/chat/ transport events, so no
+   * consumer-side progress is ever fabricated.
    */
   stage?: ThinkingStage | null
 }

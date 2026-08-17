@@ -34,7 +34,7 @@ function scrollToBottom(el: HTMLElement, smooth: boolean): void {
  * of the chat; otherwise surface a "↓ New response" affordance instead of
  * yanking their scroll position. §6.1 thinking state renders the stage-aware
  * ThinkingIndicator; §4.5 follow-up chips appear after the latest AI turn and
- * pre-fill the composer (both tested against scrollable mock lists).
+ * auto-send through the real pipeline.
  */
 export function MessageList({ messages, isTyping = false, thinkingStage = null, onPickFollowUp }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null)

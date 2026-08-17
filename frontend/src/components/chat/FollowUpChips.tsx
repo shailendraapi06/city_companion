@@ -5,8 +5,8 @@ export interface FollowUpSuggestion {
 
 /*
  * Default quick-action suggestions (APP_FLOW.md §6 note — Show cheaper /
- * Closer / Compare / More options). In the mock flow these are static; Phase 8
- * may pass per-response suggestions from the assistant payload instead.
+ * Closer / Compare / More options). Static defaults; the backend may supply
+ * per-response suggestions in a future version.
  */
 export const DEFAULT_FOLLOW_UPS: FollowUpSuggestion[] = [
   { label: 'Show cheaper', prompt: 'Show me cheaper options' },

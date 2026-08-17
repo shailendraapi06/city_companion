@@ -6,10 +6,8 @@ interface ChatErrorBannerProps {
 /*
  * Chat-level generic error (UI_UX_Brief.md §7 / Frontend_Architecture.md §9):
  * "Something went wrong" + **Try Again** / **Start New Chat** — never the raw
- * technical error. Shown when the conversation transport reports a failure
- * (Phase 8 sets ChatContext.status='error'); in the mock flow no failure path
- * is reachable, but the surface is defined and tested now so the documented
- * state is never approximated later.
+ * technical error. Shown when POST /api/chat/ reports a failure (ChatContext
+ * status='error'). The banner is fully wired and tested in Phase 8.
  */
 export function ChatErrorBanner({ onRetry, onStartNewChat }: ChatErrorBannerProps) {
   return (
