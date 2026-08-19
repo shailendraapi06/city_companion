@@ -116,11 +116,12 @@ function DemoPlaceCard({ place }: { place: DemoPlace }) {
         ))}
       </ul>
 
-      <div className="mt-3 flex flex-wrap gap-1.5">
+      <div className="mt-3 flex flex-wrap gap-1.5" aria-label="Example actions (demo only)">
         {['View details', 'Directions', 'Call', 'Save'].map((action) => (
           <span
             key={action}
             className="rounded-full border border-border bg-bg-2 px-2.5 py-1 text-xs font-medium text-text-secondary"
+            aria-hidden="true"
           >
             {action}
           </span>

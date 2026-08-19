@@ -178,7 +178,7 @@ export function SettingsForm({ saveProfile }: SettingsFormProps) {
                           type="button"
                           onClick={() => deleteConversation(conversation.id)}
                           disabled={isDeleting}
-                          className="btn-ghost text-error"
+                          className="btn-danger px-3 py-1 text-xs"
                         >
                           {isDeleting ? 'Deleting…' : 'Confirm'}
                         </button>

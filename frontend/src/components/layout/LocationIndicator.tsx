@@ -108,7 +108,7 @@ export function LocationIndicator({ className }: LocationIndicatorProps) {
               onChange={(event) => setDraft(event.target.value)}
               placeholder="e.g. Lucknow"
               autoComplete="off"
-              className="w-full rounded-lg border border-border bg-bg-1 px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-tertiary focus:border-accent-1/60"
+              className="w-full rounded-lg border border-border bg-bg-1 px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-tertiary focus:border-accent-1/60 focus-visible:ring-2 focus-visible:ring-accent-1/40"
             />
             <button
               type="submit"

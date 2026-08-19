@@ -73,7 +73,7 @@ export function Composer({ onSend, draft, onDraftChange, disabled = false }: Com
           }}
           placeholder="Ask about places, food, or hospitals…"
           aria-label="Message composer"
-          className="max-h-40 flex-1 resize-none bg-transparent px-1 py-1.5 text-sm leading-relaxed text-text-primary placeholder:text-text-tertiary focus:outline-none"
+          className="max-h-40 flex-1 resize-none bg-transparent px-1 py-1.5 text-sm leading-relaxed text-text-primary placeholder:text-text-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-1/40"
         />
 
         <button
